@@ -2,6 +2,8 @@
 
 import torch
 import numpy as np
+import sys
+import os
 from typing import Tuple, Optional, List
 from config import settings
 from .tts_base import TTSBase
@@ -17,10 +19,15 @@ class CosyVoice2Model(TTSBase):
     def _load_model(self):
         """加载CosyVoice2模型"""
         try:
-            from cosyvoice.cli.cosyvoice import CosyVoice2
+            # 从模型目录中导入 CosyVoice2
+            model_dir = os.path.abspath(settings.COSYVOICE_MODEL_DIR)
+            if model_dir not in sys.path:
+                sys.path.insert(0, model_dir)
 
-            self.model = CosyVoice2(
-                model_id_or_path=settings.COSYVOICE_MODEL_DIR,
+            from cosyvoice import CosyVoice
+
+            self.model = CosyVoice(
+                model_id_or_path=model_dir,
                 load_jit=False,
                 load_trt=False,
                 fp16=False
