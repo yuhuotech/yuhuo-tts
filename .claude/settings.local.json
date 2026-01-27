@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git -C /Users/hmw/data/www/yuhuo-tts status)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(python3 -m pip install:*)",
+      "Bash(python3 -m venv:*)",
+      "Bash(source venv/bin/activate)",
+      "Bash(/tmp/test_venv/bin/pip install:*)",
+      "Bash(/tmp/test_venv/bin/python:*)",
+      "Bash(source:*)",
+      "Bash(/Users/hmw/data/www/yuhuo-tts/venv/bin/python:*)",
+      "Bash(python3:*)"
+    ]
+  }
+}
