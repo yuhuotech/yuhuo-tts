@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  tts-api:
+    build: .
+    container_name: tts-alignment-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./pretrained_models:/app/pretrained_models
+      - ./output_audio:/app/output_audio
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
