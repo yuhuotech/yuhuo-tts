@@ -127,6 +127,11 @@ echo ""
 echo "安装依赖包（这可能需要 5-10 分钟）..."
 pip install -r requirements.txt
 
+# 安装 CosyVoice2（从官方GitHub）
+echo ""
+echo "安装 CosyVoice2..."
+pip install git+https://github.com/FunAudioLLM/CosyVoice.git
+
 success "Python 依赖安装完成"
 
 # ============================================================

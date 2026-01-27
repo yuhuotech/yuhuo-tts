@@ -34,5 +34,5 @@ gunicorn>=21.0.0
 # 模型下载
 modelscope>=1.0.0
 
-# TTS模型
-cosyvoice>=0.1.0
+# TTS模型 - CosyVoice2
+# 需要从官方GitHub安装: pip install git+https://github.com/FunAudioLLM/CosyVoice.git

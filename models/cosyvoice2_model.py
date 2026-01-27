@@ -2,7 +2,6 @@
 
 import torch
 import numpy as np
-import sys
 import os
 from typing import Tuple, Optional, List
 from config import settings
@@ -19,19 +18,11 @@ class CosyVoice2Model(TTSBase):
     def _load_model(self):
         """加载CosyVoice2模型"""
         try:
-            # 从模型目录中导入 CosyVoice2
+            from cosyvoice.cli.cosyvoice import AutoModel
+
             model_dir = os.path.abspath(settings.COSYVOICE_MODEL_DIR)
-            if model_dir not in sys.path:
-                sys.path.insert(0, model_dir)
-
-            from cosyvoice import CosyVoice
-
-            self.model = CosyVoice(
-                model_id_or_path=model_dir,
-                load_jit=False,
-                load_trt=False,
-                fp16=False
-            )
+            self.model = AutoModel(model_dir=model_dir)
+            self.sample_rate = self.model.sample_rate
             print("✓ CosyVoice2模型加载成功")
         except Exception as e:
             raise RuntimeError(f"CosyVoice2模型加载失败: {str(e)}")
@@ -62,7 +53,7 @@ class CosyVoice2Model(TTSBase):
             if mode == "sft":
                 # SFT模式 - 预定义说话人
                 speaker = speaker or "default"
-                result = self.model.inference_sft(
+                output = self.model.inference_sft(
                     text=text,
                     spk_id=speaker,
                     stream=False,
@@ -71,44 +62,43 @@ class CosyVoice2Model(TTSBase):
 
             elif mode == "zero_shot":
                 # 零样本克隆模式
-                from cosyvoice.utils.file_utils import load_wav
-
-                prompt_speech = load_wav(prompt_audio, 16000)
-                result = self.model.inference_zero_shot(
+                prompt_text = kwargs.get("prompt_text", text)
+                output = self.model.inference_zero_shot(
                     text=text,
-                    prompt_text=kwargs.get("prompt_text", text),
-                    prompt_speech=prompt_speech,
-                    stream=False,
-                    speed=speed
+                    prompt_text=prompt_text,
+                    prompt_audio=prompt_audio,
+                    stream=False
                 )
 
             elif mode == "instruct":
                 # 指令模式
-                from cosyvoice.utils.file_utils import load_wav
-
-                prompt_speech = load_wav(prompt_audio, 16000)
-                result = self.model.inference_instruct2(
+                instruction = kwargs.get("instruction", "")
+                output = self.model.inference_instruct2(
                     text=text,
-                    instruct_text=kwargs.get("instruct_text", ""),
-                    prompt_speech=prompt_speech,
-                    stream=False,
-                    speed=speed
+                    instruct_text=instruction,
+                    prompt_audio=prompt_audio,
+                    stream=False
                 )
 
             else:
                 raise ValueError(f"不支持的模式: {mode}")
 
-            # 合并音频块
-            audio_list = []
-            for chunk in result:
-                if "tts_speech" in chunk:
-                    audio_list.append(chunk["tts_speech"].numpy())
+            # 提取音频数据
+            if isinstance(output, dict) and "tts_speech" in output:
+                audio = output["tts_speech"]
+            elif isinstance(output, list) and len(output) > 0:
+                # 如果是列表，取第一个元素的tts_speech
+                audio = output[0].get("tts_speech") if isinstance(output[0], dict) else output[0]
+            else:
+                audio = output
 
-            if not audio_list:
-                raise RuntimeError("TTS生成失败")
+            # 转换为 numpy 数组
+            if hasattr(audio, "numpy"):
+                audio = audio.numpy()
 
-            audio = np.concatenate(audio_list, axis=1)
-            audio = audio.flatten()
+            audio = np.asarray(audio)
+            if audio.ndim > 1:
+                audio = audio.flatten()
 
             return audio, self.sample_rate
 
@@ -118,7 +108,11 @@ class CosyVoice2Model(TTSBase):
     def get_available_speakers(self) -> List[str]:
         """获取可用说话人列表"""
         try:
-            speakers = self.model.list_available_spks()
-            return speakers if speakers else ["default"]
+            # CosyVoice2 的默认说话人列表
+            if hasattr(self.model, "list_available_spks"):
+                speakers = self.model.list_available_spks()
+                return speakers if speakers else ["default"]
+            else:
+                return ["default"]
         except:
             return ["default"]
