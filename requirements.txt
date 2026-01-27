@@ -33,3 +33,6 @@ gunicorn>=21.0.0
 
 # 模型下载
 modelscope>=1.0.0
+
+# TTS模型
+cosyvoice>=0.1.0
