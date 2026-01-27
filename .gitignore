@@ -64,3 +64,5 @@ models/__pycache__/
 # 缓存
 *.cache
 .cache/
+
+.claude/
