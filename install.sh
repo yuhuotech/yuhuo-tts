@@ -99,7 +99,7 @@ fi
 
 # 激活虚拟环境
 echo "激活虚拟环境..."
-source "$VENV_DIR/bin/activate"
+. "$VENV_DIR/bin/activate"
 success "虚拟环境已激活"
 
 # ============================================================
@@ -164,7 +164,7 @@ fi
 # 下载 CosyVoice2
 echo ""
 echo "📥 下载 CosyVoice2-0.5B (约 4.1GB)..."
-modelscope download --model FunAudioLLM/CosyVoice2-0.5B \
+modelscope download --model iic/CosyVoice2-0.5B \
     --local_dir "$MODELS_DIR/CosyVoice2-0.5B"
 
 if [ -f "$MODELS_DIR/CosyVoice2-0.5B/llm.pt" ]; then
@@ -282,8 +282,8 @@ echo ""
 echo "📊 安装摘要："
 echo "  - 虚拟环境: $PROJECT_DIR/$VENV_DIR"
 echo "  - Python 依赖: 已安装"
-echo "  - CosyVoice2 模型: $MODELS_DIR/CosyVoice2-0.5B (4.1GB)"
-echo "  - Qwen3-TTS 模型: $MODELS_DIR/Qwen3-TTS-12Hz-1.7B-Base (4.2GB)"
+echo "  - CosyVoice2 模型: $MODELS_DIR/CosyVoice2-0.5B (4.1GB) - iic/CosyVoice2-0.5B"
+echo "  - Qwen3-TTS 模型: $MODELS_DIR/Qwen3-TTS-12Hz-1.7B-Base (4.2GB) - Qwen/Qwen3-TTS-12Hz-1.7B-Base"
 echo "  - MFA 模型: ~/.mfa/models/ (约 100MB)"
 echo ""
 
