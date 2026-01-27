@@ -1,0 +1,66 @@
+# 虚拟环境
+venv/
+env/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 测试
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 日志
+logs/
+*.log
+
+# 临时文件
+temp_audio/
+output_audio/
+*.tmp
+.claude/
+
+# ⭐ 重要: 忽略所有大型模型文件
+# TTS 模型（很大，应该通过 install.sh 脚本下载）
+models/CosyVoice2-0.5B/
+models/Qwen3-TTS-12Hz-1.7B-Base/
+models/__pycache__/
+
+# MFA 模型（保存在用户 home 目录）
+~/.mfa/
+
+# 环境变量（可能包含敏感信息）
+.env.local
+.env.*.local
+
+# 缓存
+*.cache
+.cache/

@@ -38,6 +38,11 @@ class MFAAligner:
         if not self.enabled:
             return self._fallback_alignment(text, len(audio) / sample_rate)
 
+        # 检查MFA是否可用
+        if not self._check_mfa_available():
+            print("⚠️  MFA 不可用，使用降级方案（均匀时间分配）")
+            return self._fallback_alignment(text, len(audio) / sample_rate)
+
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
                 # 保存音频和文本
@@ -62,16 +67,28 @@ class MFAAligner:
                 ], capture_output=True, text=True, timeout=settings.MFA_TIMEOUT)
 
                 if result.returncode != 0:
-                    print(f"MFA警告: {result.stderr}")
+                    print(f"⚠️  MFA对齐失败: {result.stderr[:200]}")
                     return self._fallback_alignment(text, len(audio) / sample_rate)
 
                 # 解析TextGrid
-                return self._parse_textgrid(
+                alignments = self._parse_textgrid(
                     os.path.join(output_dir, "audio.TextGrid")
                 )
 
+                if alignments:
+                    print(f"✅ MFA对齐成功: {len(alignments)} 个字符")
+                    return alignments
+                else:
+                    return self._fallback_alignment(text, len(audio) / sample_rate)
+
+        except FileNotFoundError:
+            print("⚠️  MFA 命令未找到，使用降级方案")
+            return self._fallback_alignment(text, len(audio) / sample_rate)
+        except subprocess.TimeoutExpired:
+            print(f"⚠️  MFA 对齐超时 (>{settings.MFA_TIMEOUT}s)，使用降级方案")
+            return self._fallback_alignment(text, len(audio) / sample_rate)
         except Exception as e:
-            print(f"MFA对齐失败: {str(e)}, 使用降级方案")
+            print(f"⚠️  MFA对齐异常: {str(e)}, 使用降级方案")
             return self._fallback_alignment(text, len(audio) / sample_rate)
 
     def _parse_textgrid(self, textgrid_path: str) -> List[Dict]:
@@ -103,6 +120,19 @@ class MFAAligner:
         except Exception as e:
             print(f"TextGrid解析失败: {str(e)}")
             return []
+
+    def _check_mfa_available(self) -> bool:
+        """检查MFA是否可用"""
+        try:
+            result = subprocess.run(
+                ["mfa", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            return result.returncode == 0
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return False
 
     def _fallback_alignment(
         self,

@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # CosyVoice2配置
     COSYVOICE_MODEL_DIR: str = os.getenv(
         "COSYVOICE_MODEL_DIR",
-        "pretrained_models/CosyVoice2-0.5B"
+        "./models/CosyVoice2-0.5B"
     )
     COSYVOICE_SPEED: float = float(os.getenv("COSYVOICE_SPEED", "1.0"))
     COSYVOICE_TEMPERATURE: float = float(
@@ -30,14 +30,14 @@ class Settings(BaseSettings):
     # Qwen3-TTS配置
     QWEN3_MODEL_DIR: str = os.getenv(
         "QWEN3_MODEL_DIR",
-        "pretrained_models/Qwen3-TTS-12Hz-1.7B-Base"
+        "./models/Qwen3-TTS-12Hz-1.7B-Base"
     )
     QWEN3_DTYPE: str = os.getenv("QWEN3_DTYPE", "bfloat16")
     QWEN3_ATTN_IMPL: str = os.getenv("QWEN3_ATTN_IMPL", "flash_attention_2")
 
     # MFA配置
-    MFA_ACOUSTIC_MODEL: str = os.getenv("MFA_ACOUSTIC_MODEL", "chinese_flac")
-    MFA_DICTIONARY: str = os.getenv("MFA_DICTIONARY", "chinese_flac")
+    MFA_ACOUSTIC_MODEL: str = os.getenv("MFA_ACOUSTIC_MODEL", "mandarin_mfa")
+    MFA_DICTIONARY: str = os.getenv("MFA_DICTIONARY", "mandarin_mfa")
     MFA_ENABLE: bool = os.getenv("MFA_ENABLE", "True") == "True"
     MFA_TIMEOUT: int = int(os.getenv("MFA_TIMEOUT", "120"))
 
