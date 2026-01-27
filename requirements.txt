@@ -1,0 +1,32 @@
+# FastAPI框架
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# PyTorch和音频
+torch==2.1.0
+torchaudio==2.1.0
+numpy==1.24.3
+scipy==1.11.4
+
+# 音频处理
+librosa==0.10.0
+soundfile==0.12.1
+audioread==3.1.1
+
+# 对齐工具
+montreal-forced-aligner>=3.0.0
+textgrid==1.5
+
+# 文件和配置
+python-multipart==0.0.6
+python-dotenv==1.0.0
+pyyaml==6.0
+
+# 测试和开发
+pytest==7.4.3
+requests==2.31.0
+
+# 可选: 性能优化
+gunicorn==21.2.0
