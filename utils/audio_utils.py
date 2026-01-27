@@ -25,7 +25,7 @@ def resample_audio(audio: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarra
     """音频重采样"""
     if orig_sr == target_sr:
         return audio
-    resampled = librosa.resample(audio, orig_sr=orig_sr, target_sr=target_sr, res_type='julius_fast')
+    resampled = librosa.resample(audio, orig_sr=orig_sr, target_sr=target_sr, res_type='kaiser_best')
     return resampled.astype(np.float32)
 
 def get_audio_duration(audio: np.ndarray, sr: int) -> float:
