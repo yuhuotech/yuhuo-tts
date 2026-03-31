@@ -1,84 +1,55 @@
 # YuHuo TTS
 
-一个面向服务化部署的 TTS API 项目，基于 FastAPI 封装 CosyVoice2、Qwen3-TTS 和 MFA 对齐能力，提供统一的文本转语音、音频输出和时间戳接口。
+<p align="center">一个面向服务化部署的 TTS API 项目，基于 FastAPI 封装 CosyVoice2、Qwen3-TTS 和 MFA 对齐能力，提供统一的文本转语音、音频输出和时间戳接口。</p>
 
-## Quick Start
+<p align="center">
+  <img alt="Python" src="https://img.shields.io/badge/python-3.12-blue" />
+  <img alt="uv" src="https://img.shields.io/badge/deps-uv-6A5CFF" />
+  <img alt="FastAPI" src="https://img.shields.io/badge/api-FastAPI-009688" />
+  <img alt="Platforms" src="https://img.shields.io/badge/platform-macOS%20%7C%20Ubuntu%20%7C%20CentOS-444" />
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
+</p>
 
-新用户现在只需要这两步：
+**YuHuo TTS** 的目标不是训练模型，而是把本地 TTS 推理能力整理成一个可部署、可测试、可接入业务系统的 HTTP 服务。
 
-```bash
-git clone git@github.com:yuhuotech/yuhuo-tts.git
-cd yuhuo-tts
-bash scripts/install.sh
-bash scripts/run.sh
-```
+它适合：
 
-如果你在 Linux 上，支持的主路径是：
+- 给 Web、App、自动化流程提供统一的 TTS API
+- 在 `CosyVoice2` 和 `Qwen3-TTS` 之间切换与对比
+- 为字幕、高亮朗读、逐字播放提供时间戳
+- 把本地推理环境整理成团队可复用的部署仓库
 
-- Ubuntu 20.04+
-- CentOS 8+ / Rocky Linux / AlmaLinux
-- macOS 12+
+## Contents
 
-默认行为：
+- [Highlights](#highlights)
+- [Quick Start](#quick-start)
+- [Linux Support](#linux-support)
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Model Support](#model-support)
+- [Alignment Strategy](#alignment-strategy)
+- [API Summary](#api-summary)
+- [Install Flow](#install-flow)
+- [Manual Setup](#manual-setup)
+- [Configuration](#configuration)
+- [Dependency Management](#dependency-management)
+- [Docker](#docker)
+- [Scripts](#scripts)
+- [Docs](#docs)
+- [License](#license)
 
-- 自动生成 `.env`
-- 按 `DEFAULT_TTS_MODEL` 只下载一个模型
-- 自动安装 CosyVoice 运行依赖
-- 如果 `MFA_ENABLE=True`，自动安装并验收 MFA
+## Highlights
 
-默认地址：
-
-- API: `http://127.0.0.1:8000`
-- Docs: `http://127.0.0.1:8000/docs`
-
-推荐先保持默认配置，资源压力最小：
-
-```env
-DEFAULT_TTS_MODEL=cosyvoice2
-MFA_ENABLE=True
-MFA_FALLBACK_ALIGNMENT=none
-```
-
-## Linux Support
-
-项目现在不只按 macOS 来设计，安装脚本已经考虑了 Linux。
-
-在 Ubuntu 上，建议先准备：
-
-```bash
-sudo apt update
-sudo apt install -y git curl build-essential ffmpeg
-```
-
-在 CentOS / RHEL / Rocky / AlmaLinux 上，建议先准备：
-
-```bash
-sudo yum install -y git curl gcc gcc-c++ make ffmpeg
-```
-
-如果系统较新，也可以使用：
-
-```bash
-sudo dnf install -y git curl gcc gcc-c++ make ffmpeg
-```
-
-之后统一执行：
-
-```bash
-bash scripts/install.sh
-bash scripts/run.sh
-```
+- 统一封装 `CosyVoice2` 和 `Qwen3-TTS`
+- 一个 `/synthesize` 接口覆盖文本转语音和时间戳生成
+- 支持 `base64`、文件 URL、或同时返回两种音频输出
+- 启动时只加载 `DEFAULT_TTS_MODEL`，避免两个模型一起吃满资源
+- MFA 可用时返回真实时间戳，不可用时可配置为不返回或均分回退
+- 安装入口已经收敛到 `bash scripts/install.sh`
 
 ## Overview
 
-YuHuo TTS 解决的是“把本地模型能力整理成可调用 API”的问题，重点不是训练模型，而是把推理、文件输出、上传参考音频、时间戳对齐和部署入口串成一个可落地的服务。
-
-适合的场景：
-
-- 提供统一的 TTS HTTP API，可接入网站、应用、自动化流程或其他服务
-- 在多模型之间切换，比较音色、速度和适用场景
-- 为字幕、高亮朗读、逐字播放等功能生成时间戳
-- 把本地推理环境整理为可复用的部署仓库
+YuHuo TTS 解决的是“把本地模型能力整理成可调用 API”的问题。重点不是训练模型，而是把推理、音频输出、参考音频复用、时间戳对齐和部署入口串成一个可落地的服务。
 
 ## Features
 
@@ -206,6 +177,71 @@ YuHuo TTS 解决的是“把本地模型能力整理成可调用 API”的问题
 
 推荐在 `/synthesize` 中使用 `uploaded_audio_id` 引用已上传文件。
 兼容场景下也可以直接传本地 `prompt_audio` 路径，但那更适合同机部署或可信环境。
+
+## Quick Start
+
+新用户现在只需要这两步。
+
+```bash
+git clone git@github.com:yuhuotech/yuhuo-tts.git
+cd yuhuo-tts
+bash scripts/install.sh
+bash scripts/run.sh
+```
+
+安装脚本会自动完成：
+
+- 自动生成 `.env`
+- 按 `DEFAULT_TTS_MODEL` 只下载一个模型
+- 自动安装 CosyVoice 运行依赖
+- 如果 `MFA_ENABLE=True`，自动安装并验收 MFA
+
+启动后默认地址：
+
+- API: `http://127.0.0.1:8000`
+- Docs: `http://127.0.0.1:8000/docs`
+
+建议初次使用保持默认配置，资源压力最小：
+
+```env
+DEFAULT_TTS_MODEL=cosyvoice2
+MFA_ENABLE=True
+MFA_FALLBACK_ALIGNMENT=none
+```
+
+## Linux Support
+
+当前主要兼容路径：
+
+- Ubuntu 20.04+
+- CentOS 8+ / Rocky Linux / AlmaLinux
+- macOS 12+
+
+在 Ubuntu 上，建议先准备：
+
+```bash
+sudo apt update
+sudo apt install -y git curl build-essential ffmpeg
+```
+
+在 CentOS / RHEL / Rocky / AlmaLinux 上，建议先准备：
+
+```bash
+sudo yum install -y git curl gcc gcc-c++ make ffmpeg
+```
+
+如果系统较新，也可以使用：
+
+```bash
+sudo dnf install -y git curl gcc gcc-c++ make ffmpeg
+```
+
+之后统一执行：
+
+```bash
+bash scripts/install.sh
+bash scripts/run.sh
+```
 
 ## Install Flow
 
