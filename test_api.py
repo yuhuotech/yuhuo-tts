@@ -19,10 +19,14 @@ class APITester:
             result = response.json()
 
             assert response.status_code == 200
-            assert result['status'] == 'ok'
+            assert result['status'] in ['ok', 'degraded']
 
             print(f"✓ 服务正常运行")
-            print(f"  可用模型: {result['models']}")
+            loaded_models = [
+                name for name, info in result['models'].items()
+                if info['status'] == 'loaded'
+            ]
+            print(f"  已加载模型: {loaded_models}")
             print(f"  MFA状态: {result['mfa_enabled']}")
             return True
         except Exception as e:

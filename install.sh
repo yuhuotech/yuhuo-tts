@@ -129,6 +129,10 @@ pip install -r requirements.txt
 
 success "Python 依赖安装完成"
 
+echo "安装 Qwen3-TTS Python 包..."
+pip install git+https://github.com/QwenLM/Qwen3-TTS.git
+success "Qwen3-TTS Python 包安装完成"
+
 # ============================================================
 # Step 5: 创建目录结构
 # ============================================================
@@ -143,8 +147,48 @@ mkdir -p temp_audio
 mkdir -p output_audio
 mkdir -p logs
 mkdir -p "$TEMP_DIR"
+mkdir -p third_party
 
 success "目录结构创建完成"
+
+# ============================================================
+# Step 5.2: 克隆 CosyVoice 官方仓库
+# ============================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Step 5.2: 克隆 CosyVoice 官方仓库"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+if [ -d "third_party/CosyVoice" ]; then
+    warning "CosyVoice 仓库已存在，跳过克隆"
+else
+    echo "克隆官方 CosyVoice 仓库（包含子模块）..."
+    # 重要：必须添加 --recursive 参数以下载 Matcha-TTS 子模块
+    if git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git third_party/CosyVoice; then
+        success "CosyVoice 仓库克隆完成"
+    else
+        # 如果克隆失败，尝试分步进行
+        echo "尝试分步克隆..."
+        if git clone https://github.com/FunAudioLLM/CosyVoice.git third_party/CosyVoice; then
+            cd third_party/CosyVoice
+            git submodule update --init --recursive
+            cd ../../
+            success "CosyVoice 仓库克隆完成（通过分步方式）"
+        else
+            error "CosyVoice 仓库克隆失败"
+        fi
+    fi
+
+    # 安装 CosyVoice 的依赖
+    echo "安装 CosyVoice 依赖..."
+    if [ -f "third_party/CosyVoice/requirements.txt" ]; then
+        pip install -r third_party/CosyVoice/requirements.txt
+        success "CosyVoice 依赖安装完成"
+    else
+        warning "找不到 CosyVoice requirements.txt"
+    fi
+fi
 
 # ============================================================
 # Step 6: 下载 TTS 模型

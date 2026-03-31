@@ -1,6 +1,5 @@
 FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 
-LABEL maintainer="your-email@example.com"
 LABEL description="TTS-Alignment-API: Multi-model TTS with MFA Forced Alignment"
 
 WORKDIR /app
@@ -11,6 +10,7 @@ RUN apt-get update && apt-get install -y \
     python3.10-dev \
     python3-pip \
     git \
+    git-lfs \
     wget \
     curl \
     build-essential \
@@ -26,11 +26,20 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ \
     && pip install gunicorn -i https://mirrors.aliyun.com/pypi/simple/
 
+# 安装第三方 TTS 依赖
+RUN git lfs install \
+    && git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git /opt/CosyVoice \
+    && pip install -r /opt/CosyVoice/requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ \
+    && pip install git+https://github.com/QwenLM/Qwen3-TTS.git -i https://mirrors.aliyun.com/pypi/simple/
+
 # 复制应用代码
 COPY . .
 
 # 创建必要目录
-RUN mkdir -p logs temp_audio output_audio pretrained_models
+RUN mkdir -p logs temp_audio output_audio models
+
+# CosyVoice 运行时需要源码和 Matcha-TTS 子模块
+ENV PYTHONPATH="/opt/CosyVoice:/opt/CosyVoice/third_party/Matcha-TTS:${PYTHONPATH}"
 
 # 暴露端口
 EXPOSE 8000

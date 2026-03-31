@@ -4,13 +4,15 @@ services:
   tts-api:
     build: .
     container_name: tts-alignment-api
+    env_file:
+      - .env.cloud
     ports:
       - "8000:8000"
     volumes:
-      - ./pretrained_models:/app/pretrained_models
+      - ./models:/app/models
       - ./output_audio:/app/output_audio
       - ./logs:/app/logs
-      - ./.env:/app/.env
+      - ./temp_audio:/app/temp_audio
     environment:
       - CUDA_VISIBLE_DEVICES=0
     deploy:

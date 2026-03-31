@@ -17,5 +17,9 @@ output_audio/*
 temp_audio/*
 logs/*
 pretrained_models/
+.env
+.env.cloud
+models/
+third_party/
 .env.local
 .env.*.local

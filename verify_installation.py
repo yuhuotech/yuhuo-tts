@@ -7,6 +7,7 @@ import os
 import sys
 from pathlib import Path
 import json
+import importlib.util
 
 def check_models():
     """检查模型文件完整性"""
@@ -75,15 +76,15 @@ def check_dependencies():
     print("\n📚 检查 Python 依赖...")
     dependencies = [
         'fastapi', 'uvicorn', 'pydantic', 'torch', 'torchaudio',
-        'librosa', 'soundfile', 'numpy', 'scipy', 'pyyaml'
+        'librosa', 'soundfile', 'numpy', 'scipy', 'pyyaml',
+        'textgrid', 'qwen_tts'
     ]
 
     missing = []
     for dep in dependencies:
-        try:
-            __import__(dep)
+        if importlib.util.find_spec(dep) is not None:
             print(f"  ✅ {dep}")
-        except ImportError:
+        else:
             print(f"  ❌ {dep}")
             missing.append(dep)
 
@@ -109,14 +110,12 @@ def check_directories():
 def check_mfa():
     """检查 MFA 安装"""
     print("\n🔤 检查 MFA...")
-    try:
-        from montreal_forced_aligner.command_line.mfa import mfa_cli
+    if importlib.util.find_spec("montreal_forced_aligner") is not None:
         print("  ✅ Montreal Forced Aligner")
         return True
-    except ImportError as e:
-        print(f"  ❌ MFA 导入失败: {e}")
-        print("     降级方案: 将使用均匀时间分布")
-        return False
+    print("  ❌ MFA 未安装")
+    print("     降级方案: 将使用均匀时间分布")
+    return False
 
 def check_config():
     """检查配置文件"""
@@ -163,7 +162,7 @@ def main():
             print("    运行: pip install -r requirements.txt")
         if not mfa_ok:
             print("  - MFA 安装有问题")
-            print("    运行: python /tmp/download_mfa_models.py")
+            print("    运行: mfa model download acoustic mandarin_mfa")
         if not all(dirs_ok.values()):
             print("  - 缺少必要目录")
         return 1

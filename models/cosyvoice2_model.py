@@ -3,6 +3,7 @@
 import torch
 import numpy as np
 import os
+import sys
 from typing import Tuple, Optional, List
 from config import settings
 from .tts_base import TTSBase
@@ -18,11 +19,24 @@ class CosyVoice2Model(TTSBase):
     def _load_model(self):
         """加载CosyVoice2模型"""
         try:
-            from cosyvoice.cli.cosyvoice import AutoModel
+            # 设置 PYTHONPATH（关键！）- 必须在导入之前
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            matcha_path = os.path.join(project_root, "third_party", "CosyVoice", "third_party", "Matcha-TTS")
+
+            if os.path.exists(matcha_path) and matcha_path not in sys.path:
+                sys.path.insert(0, matcha_path)
+
+            # 也添加 CosyVoice 项目根目录
+            cosyvoice_root = os.path.join(project_root, "third_party", "CosyVoice")
+            if os.path.exists(cosyvoice_root) and cosyvoice_root not in sys.path:
+                sys.path.insert(0, cosyvoice_root)
+
+            # 导入 CosyVoice
+            from cosyvoice.cli.cosyvoice import CosyVoice
 
             model_dir = os.path.abspath(settings.COSYVOICE_MODEL_DIR)
-            self.model = AutoModel(model_dir=model_dir)
-            self.sample_rate = self.model.sample_rate
+            self.model = CosyVoice(model_dir)
+            self.sample_rate = 22050  # CosyVoice2 固定采样率
             print("✓ CosyVoice2模型加载成功")
         except Exception as e:
             raise RuntimeError(f"CosyVoice2模型加载失败: {str(e)}")
@@ -41,56 +55,91 @@ class CosyVoice2Model(TTSBase):
 
         Args:
             text: 输入文本
-            mode: 合成模式 ("sft" | "zero_shot" | "instruct")
-            speaker: 说话人ID (SFT模式)
-            prompt_audio: 参考音频路径 (zero_shot/instruct模式)
-            speed: 语速倍数
+            mode: 合成模式 ("sft" | "zero_shot" | "cross_lingual" | "instruct")
+            speaker: 说话人ID (SFT/Instruct模式)
+            prompt_audio: 参考音频路径 (zero_shot/cross_lingual/instruct模式)
+            speed: 语速倍数 (0.5-2.0)
 
         Returns:
             (audio_waveform, sample_rate)
         """
         try:
+            audio_list = []
+
             if mode == "sft":
-                # SFT模式 - 预定义说话人
-                speaker = speaker or "default"
-                output = self.model.inference_sft(
+                # SFT 模式 - 使用预训练音色
+                spk_id = speaker or "中文女"
+                for audio_chunk in self.model.inference_sft(
                     text=text,
-                    spk_id=speaker,
-                    stream=False,
-                    speed=speed
-                )
+                    spk_id=spk_id,
+                    stream=False
+                ):
+                    if "tts_speech" in audio_chunk:
+                        audio_list.append(audio_chunk["tts_speech"])
 
             elif mode == "zero_shot":
-                # 零样本克隆模式
+                # Zero-shot 克隆模式 - 从参考音频克隆音色
+                if not prompt_audio:
+                    raise ValueError("zero_shot 模式需要提供 prompt_audio")
+
+                from cosyvoice.utils.file_utils import load_wav
+
                 prompt_text = kwargs.get("prompt_text", text)
-                output = self.model.inference_zero_shot(
+                prompt_speech = load_wav(prompt_audio, 16000)
+
+                for audio_chunk in self.model.inference_zero_shot(
                     text=text,
                     prompt_text=prompt_text,
-                    prompt_audio=prompt_audio,
+                    prompt_speech=prompt_speech,
                     stream=False
-                )
+                ):
+                    if "tts_speech" in audio_chunk:
+                        audio_list.append(audio_chunk["tts_speech"])
+
+            elif mode == "cross_lingual":
+                # 跨语言克隆模式
+                if not prompt_audio:
+                    raise ValueError("cross_lingual 模式需要提供 prompt_audio")
+
+                from cosyvoice.utils.file_utils import load_wav
+
+                prompt_speech = load_wav(prompt_audio, 16000)
+
+                for audio_chunk in self.model.inference_cross_lingual(
+                    text=text,
+                    prompt_speech=prompt_speech,
+                    stream=False
+                ):
+                    if "tts_speech" in audio_chunk:
+                        audio_list.append(audio_chunk["tts_speech"])
 
             elif mode == "instruct":
-                # 指令模式
-                instruction = kwargs.get("instruction", "")
-                output = self.model.inference_instruct2(
+                # Instruct 模式 - 情感/风格控制
+                spk_id = speaker or "中文女"
+                instruct_text = kwargs.get("instruct_text", "")
+
+                for audio_chunk in self.model.inference_instruct(
                     text=text,
-                    instruct_text=instruction,
-                    prompt_audio=prompt_audio,
+                    spk_id=spk_id,
+                    instruct_text=instruct_text,
                     stream=False
-                )
+                ):
+                    if "tts_speech" in audio_chunk:
+                        audio_list.append(audio_chunk["tts_speech"])
 
             else:
                 raise ValueError(f"不支持的模式: {mode}")
 
-            # 提取音频数据
-            if isinstance(output, dict) and "tts_speech" in output:
-                audio = output["tts_speech"]
-            elif isinstance(output, list) and len(output) > 0:
-                # 如果是列表，取第一个元素的tts_speech
-                audio = output[0].get("tts_speech") if isinstance(output[0], dict) else output[0]
+            if not audio_list:
+                raise RuntimeError("TTS生成失败，未获得音频数据")
+
+            # 合并所有音频块
+            audio_tensors = audio_list
+            if len(audio_tensors) > 1:
+                # 在时间维度上连接
+                audio = torch.cat(audio_tensors, dim=-1)
             else:
-                audio = output
+                audio = audio_tensors[0]
 
             # 转换为 numpy 数组
             if hasattr(audio, "numpy"):
@@ -108,11 +157,15 @@ class CosyVoice2Model(TTSBase):
     def get_available_speakers(self) -> List[str]:
         """获取可用说话人列表"""
         try:
-            # CosyVoice2 的默认说话人列表
-            if hasattr(self.model, "list_available_spks"):
+            # 获取可用音色列表（注意方法名拼写）
+            if hasattr(self.model, "list_avaliable_spks"):
+                speakers = self.model.list_avaliable_spks()
+                return speakers if speakers else []
+            elif hasattr(self.model, "list_available_spks"):
                 speakers = self.model.list_available_spks()
-                return speakers if speakers else ["default"]
+                return speakers if speakers else []
             else:
-                return ["default"]
+                # 默认音色列表
+                return ["中文女", "中文男"]
         except:
-            return ["default"]
+            return ["中文女", "中文男"]

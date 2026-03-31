@@ -1,9 +1,9 @@
 """FastAPI TTS-Alignment 应用"""
 
+from pathlib import Path
+
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-import numpy as np
 import soundfile as sf
 import base64
 import uuid
@@ -18,8 +18,6 @@ from models.cosyvoice2_model import CosyVoice2Model
 from models.qwen3_model import Qwen3Model
 from alignment.mfa_aligner import MFAAligner
 from utils.audio_utils import normalize_audio
-from utils.file_utils import get_file_url
-
 # 日志配置
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
@@ -49,19 +47,33 @@ app.add_middleware(
 
 # 全局模型实例
 models = {}
+model_status = {}
 aligner = MFAAligner()
 
 def load_models():
     """初始化模型"""
-    global models
-    try:
-        logger.info("正在加载TTS模型...")
-        models["cosyvoice2"] = CosyVoice2Model()
-        models["qwen3"] = Qwen3Model()
-        logger.info("✓ 所有模型加载成功")
-    except Exception as e:
-        logger.error(f"模型加载失败: {str(e)}")
-        raise
+    global models, model_status
+    logger.info("正在加载TTS模型...")
+
+    models.clear()
+    model_status.clear()
+
+    model_loaders = {
+        "cosyvoice2": CosyVoice2Model,
+        "qwen3": Qwen3Model,
+    }
+
+    for model_name, loader in model_loaders.items():
+        try:
+            models[model_name] = loader()
+            model_status[model_name] = {"status": "loaded", "error": None}
+            logger.info("✓ %s 模型加载成功", model_name)
+        except Exception as e:
+            model_status[model_name] = {"status": "failed", "error": str(e)}
+            logger.exception("%s 模型加载失败", model_name)
+
+    if not models:
+        raise RuntimeError("没有可用的 TTS 模型，服务无法启动")
 
 # 请求/响应模型
 class SynthesizeRequest(BaseModel):
@@ -95,9 +107,9 @@ async def startup_event():
 async def health_check():
     """健康检查"""
     return {
-        "status": "ok",
+        "status": "ok" if models else "degraded",
         "timestamp": datetime.now().isoformat(),
-        "models": list(models.keys()),
+        "models": model_status,
         "mfa_enabled": aligner.enabled
     }
 
@@ -193,12 +205,22 @@ async def list_models():
     """获取可用模型列表"""
     model_info = {}
 
-    for model_name, model_instance in models.items():
-        model_info[model_name] = {
-            "sample_rate": model_instance.get_sample_rate(),
-            "speakers": model_instance.get_available_speakers(),
-            "status": "loaded"
-        }
+    for model_name, status in model_status.items():
+        if model_name in models:
+            model_instance = models[model_name]
+            model_info[model_name] = {
+                "sample_rate": model_instance.get_sample_rate(),
+                "speakers": model_instance.get_available_speakers(),
+                "status": "loaded",
+                "error": None,
+            }
+        else:
+            model_info[model_name] = {
+                "sample_rate": None,
+                "speakers": [],
+                "status": status["status"],
+                "error": status["error"],
+            }
 
     return {
         "status": "success",
@@ -213,20 +235,21 @@ async def upload_audio(file: UploadFile = File(...)):
 
     try:
         # 验证文件
-        if not file.filename.endswith(('.wav', '.mp3', '.m4a', '.flac')):
+        if not file.filename or not file.filename.endswith(('.wav', '.mp3', '.m4a', '.flac')):
             raise HTTPException(status_code=400, detail="不支持的音频格式")
 
-        if file.size > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
+        content = await file.read()
+        if len(content) > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
             raise HTTPException(status_code=413, detail="文件过大")
 
         # 保存文件
         file_id = str(uuid.uuid4())
+        sanitized_name = Path(file.filename).name
         file_path = os.path.join(
             settings.TEMP_AUDIO_DIR,
-            f"{file_id}_{file.filename}"
+            f"{file_id}_{sanitized_name}"
         )
 
-        content = await file.read()
         with open(file_path, 'wb') as f:
             f.write(content)
 
@@ -236,9 +259,9 @@ async def upload_audio(file: UploadFile = File(...)):
             "status": "success",
             "data": {
                 "file_id": file_id,
-                "filename": file.filename,
+                "filename": sanitized_name,
                 "size": len(content),
-                "path": file_path
+                "prompt_audio": file_path,
             }
         }
 

@@ -1,159 +1,169 @@
-# YuHuo TTS - 语音合成 + 字级对齐服务
+# YuHuo TTS
 
-> 一个生产级的 TTS 语音合成 + MFA 字级对齐 API 服务，支持 CosyVoice2 和 Qwen3-TTS 双模型。
+一个基于 FastAPI 的 TTS API 服务，提供：
 
-## 🚀 快速开始
+- CosyVoice2 与 Qwen3-TTS 双模型接入
+- 音频合成结果输出为 `base64` 或文件 URL
+- MFA 对齐，失败时自动降级为均匀时间分配
+- 音频上传接口，可返回 `prompt_audio` 路径供克隆模式使用
 
-### 环境要求
+## 当前状态
+
+项目已经具备基本功能闭环，但仍依赖外部模型、第三方源码仓库和 GPU 环境。
+
+- 适合公开源码
+- 不适合把模型权重、真实环境变量或部署产物一起公开
+- 第三方模型和源码需按各自许可证单独安装和使用
+
+## 开源前已处理
+
+- 仓库默认忽略 `.env`、`.env.cloud`、`models/`、`third_party/`
+- 提供 `.env.example` 和 `.env.cloud.example`
+- Docker 与默认配置统一使用 `models/` 目录
+- 服务启动时允许部分模型加载失败，只要至少有一个模型可用就能启动
+
+## 目录约定
+
+```text
+.
+├── app.py
+├── config.py
+├── models/
+│   ├── cosyvoice2_model.py
+│   └── qwen3_model.py
+├── alignment/
+├── utils/
+├── install.sh
+├── run.sh
+├── .env.example
+└── .env.cloud.example
+```
+
+## 环境要求
+
 - Python 3.10+
-- NVIDIA GPU with CUDA 11.8+
-- 16GB+ RAM
-- 20GB+ 存储空间（用于模型）
+- NVIDIA GPU + CUDA
+- 16 GB+ RAM
+- 20 GB+ 磁盘空间用于模型
 
-### 1. 克隆项目
+## 快速开始
+
+### 1. 准备配置
+
 ```bash
-cd /data/www/yuhuo-tts
+cp .env.example .env
 ```
 
 ### 2. 安装依赖
+
+推荐直接使用安装脚本：
+
 ```bash
-conda create -n tts-api python=3.10
-conda activate tts-api
-pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
-conda install -c conda-forge montreal-forced-aligner
+bash install.sh
 ```
 
-### 3. 下载模型
-```bash
-# CosyVoice2
-modelscope download --model FunAudioLLM/CosyVoice2-0.5B \
-  --local_dir pretrained_models/CosyVoice2-0.5B
+它会执行这些步骤：
 
-# Qwen3-TTS
+- 创建 `venv`
+- 安装 Python 依赖
+- 安装 Qwen3-TTS Python 包
+- 克隆 `third_party/CosyVoice`
+- 下载 CosyVoice2 / Qwen3-TTS 模型到 `models/`
+- 检查 MFA
+
+### 3. 启动服务
+
+```bash
+bash run.sh
+```
+
+服务默认监听 `http://localhost:8000`。
+
+## 手动安装
+
+如果不想使用脚本，至少需要完成下面几步：
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+pip install git+https://github.com/QwenLM/Qwen3-TTS.git
+git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git third_party/CosyVoice
+```
+
+然后下载模型：
+
+```bash
+modelscope download --model iic/CosyVoice2-0.5B \
+  --local_dir ./models/CosyVoice2-0.5B
+
 modelscope download --model Qwen/Qwen3-TTS-12Hz-1.7B-Base \
-  --local_dir pretrained_models/Qwen3-TTS-12Hz-1.7B-Base
-
-# MFA模型
-mfa model download acoustic chinese_flac
-mfa model download dictionary chinese_flac
+  --local_dir ./models/Qwen3-TTS-12Hz-1.7B-Base
 ```
 
-### 4. 启动服务
+如需真实 MFA 对齐，还需要安装 Montreal Forced Aligner 并下载对应模型：
+
 ```bash
-python app.py
+mfa model download acoustic mandarin_mfa
+mfa model download dictionary mandarin_mfa
 ```
 
-服务将在 `http://localhost:8000` 运行
+## API
 
-### 5. 测试 API
-```bash
-python test_api.py
-```
+### `GET /health`
 
-## 📚 API 文档
+返回服务状态、已加载模型和 MFA 开关状态。模型加载失败时会显示错误信息。
 
-### 合成语音
+### `GET /models`
 
-**端点**: `POST /synthesize`
+返回每个模型的状态、采样率、可用音色和错误信息。
 
-**请求示例**:
+### `POST /synthesize`
+
+请求示例：
+
 ```json
 {
-  "text": "你好世界",
+  "text": "你好，这是一个测试。",
   "model": "cosyvoice2",
   "mode": "sft",
   "output_format": "base64"
 }
 ```
 
-**响应示例**:
-```json
-{
-  "status": "success",
-  "data": {
-    "audio": "UklGRi4AAAA...",
-    "alignments": [
-      {"char": "你", "start": 0.0, "end": 0.45, "confidence": 0.92},
-      {"char": "好", "start": 0.45, "end": 0.9, "confidence": 0.91}
-    ],
-    "duration": 2.45,
-    "sample_rate": 22050
-  }
-}
-```
+### `POST /upload_audio`
 
-### 获取可用模型
+上传音频后，响应里的 `prompt_audio` 可直接作为克隆模式的 `prompt_audio` 参数。
 
-**端点**: `GET /models`
+## Docker
 
-**响应示例**:
-```json
-{
-  "status": "success",
-  "data": {
-    "cosyvoice2": {"sample_rate": 22050, "speakers": ["default"]},
-    "qwen3": {"sample_rate": 24000, "speakers": ["default"]}
-  }
-}
-```
-
-## 📊 功能特性
-
-- ✅ 双模型支持 (CosyVoice2 + Qwen3-TTS)
-- ✅ 字级时间戳对齐 (MFA)
-- ✅ 多格式输出 (base64/URL)
-- ✅ 文件上传功能
-- ✅ 生产级日志和监控
-- ✅ Docker 容器化
-- ✅ 完整 API 文档
-
-## 🔧 配置
-
-编辑 `.env` 文件进行配置：
+先准备云环境配置：
 
 ```bash
-# TTS模型
-DEFAULT_TTS_MODEL=cosyvoice2
-
-# API端口
-API_PORT=8000
-
-# MFA对齐
-MFA_ENABLE=True
-
-# 日志级别
-LOG_LEVEL=INFO
+cp .env.cloud.example .env.cloud
+docker compose up -d --build
 ```
 
-## 🐳 Docker 部署
+默认挂载目录：
 
-```bash
-# 构建镜像
-docker build -t tts-alignment-api:latest .
+- `./models -> /app/models`
+- `./output_audio -> /app/output_audio`
+- `./logs -> /app/logs`
+- `./temp_audio -> /app/temp_audio`
 
-# 运行容器
-docker-compose up -d
+说明：Docker 镜像构建时会安装第三方 TTS 依赖，但模型文件仍建议放在宿主机挂载目录中。
 
-# 查看日志
-docker logs -f tts-alignment-api
-```
+## 不应公开的内容
 
-## 📖 完整文档
+这些内容不应提交到公开仓库：
 
-详见 `docs/` 目录：
-- `TTS_Alignment_完整方案.md` - 技术架构
-- `快速开始指南.md` - 详细部署
-- `工具函数和辅助代码.md` - API 参考
-- `项目总结与行动计划.md` - 优化指南
+- `.env`
+- `.env.cloud`
+- `models/`
+- `third_party/`
+- `logs/` 下的真实日志
+- `temp_audio/`、`output_audio/` 下的实际音频文件
 
-## 🤝 支持
+## 许可证
 
-遇到问题？查看 `docs/文档导航和快速参考.md` 的故障排查部分。
-
-## 📄 许可证
-
-按 CosyVoice2 和 Qwen3-TTS 的许可证使用。
-
----
-
-**最后更新**: 2026-01-27
+本仓库代码采用 MIT 许可证；第三方依赖、模型源码与模型权重仍需分别遵守各自许可证与使用条款。

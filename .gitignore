@@ -58,6 +58,8 @@ models/__pycache__/
 ~/.mfa/
 
 # 环境变量（可能包含敏感信息）
+.env
+.env.cloud
 .env.local
 .env.*.local
 
@@ -66,3 +68,6 @@ models/__pycache__/
 .cache/
 
 .claude/
+
+# 第三方源码依赖
+third_party/

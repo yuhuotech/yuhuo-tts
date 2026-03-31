@@ -34,5 +34,8 @@ gunicorn>=21.0.0
 # 模型下载
 modelscope>=1.0.0
 
-# TTS模型
-cosyvoice>=0.0.8
+# 注意事项：
+# 1. CosyVoice2 官方代码库已在 install.sh 中自动克隆到 third_party/CosyVoice
+# 2. CosyVoice 的依赖（包括 pynini）由其自身的 requirements.txt 管理
+# 3. 必须设置 PYTHONPATH 指向 third_party/CosyVoice/third_party/Matcha-TTS
+# 4. 建议使用 bash run.sh 启动应用，会自动设置 PYTHONPATH
