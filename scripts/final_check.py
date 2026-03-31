@@ -9,6 +9,24 @@ from pathlib import Path
 import importlib.util
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from config import settings
+from alignment.mfa_aligner import MFAAligner
+
+
+def _resolve_existing_path(*candidates: Path) -> Path | None:
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _path_size_mb(path: Path) -> float:
+    if path.is_file():
+        return path.stat().st_size / (1024**2)
+    return sum(item.stat().st_size for item in path.rglob('*') if item.is_file()) / (1024**2)
 
 def check_tts_models():
     """检查 TTS 模型"""
@@ -63,33 +81,31 @@ def check_mfa_models():
     print("\n" + "=" * 60)
     print("🔤 MFA 中文模型检查")
     print("=" * 60)
-
-    mfa_path = Path.home() / '.mfa' / 'models'
-    models_ok = True
-
-    # 检查声学模型
-    acoustic_path = mfa_path / 'acoustic_models' / 'mandarin_mfa'
-    print(f"\n声学模型 (mandarin_mfa):")
-    if acoustic_path.exists():
-        size_mb = acoustic_path.stat().st_size / (1024**2)
-        print(f"  ✅ {acoustic_path}")
-        print(f"  📊 大小: {size_mb:.1f}MB")
+    status = MFAAligner().get_status(force_refresh=True)
+    print(f"enabled: {status['enabled']}")
+    print(f"available: {status['available']}")
+    print(f"command_available: {status['command_available']}")
+    print(f"command_path: {status['command_path']}")
+    print(f"command_error: {status['command_error']}")
+    print(f"fallback_alignment: {status['fallback_alignment']}")
+    print(f"reason: {status['reason']}")
+    print(f"\n声学模型 ({status['acoustic_model']}):")
+    if status["acoustic_model_path"]:
+        path = Path(status["acoustic_model_path"])
+        print(f"  ✅ {path}")
+        print(f"  📊 大小: {_path_size_mb(path):.1f}MB")
     else:
-        print(f"  ❌ 不存在: {acoustic_path}")
-        models_ok = False
+        print(f"  ❌ 未找到: {status['acoustic_model']}")
 
-    # 检查词典
-    dict_path = mfa_path / 'dictionary_models' / 'mandarin_mfa.dict'
-    print(f"\n词典 (mandarin_mfa):")
-    if dict_path.exists():
-        size_mb = dict_path.stat().st_size / (1024**2)
-        print(f"  ✅ {dict_path}")
-        print(f"  📊 大小: {size_mb:.1f}MB")
+    print(f"\n词典 ({status['dictionary']}):")
+    if status["dictionary_path"]:
+        path = Path(status["dictionary_path"])
+        print(f"  ✅ {path}")
+        print(f"  📊 大小: {_path_size_mb(path):.1f}MB")
     else:
-        print(f"  ❌ 不存在: {dict_path}")
-        models_ok = False
+        print(f"  ❌ 未找到: {status['dictionary']}")
 
-    return models_ok
+    return status["available"]
 
 def check_config():
     """检查配置文件"""
@@ -189,7 +205,8 @@ def main():
     if all_ok:
         print("✅ 一切就绪！可以启动 API 服务了")
         print("\n运行命令:")
-        print("  python app.py")
+        print("  uv sync")
+        print("  bash scripts/run.sh")
         print("\n访问 API 文档:")
         print("  http://localhost:8000/docs")
         return 0
@@ -197,13 +214,14 @@ def main():
         print("❌ 有些问题需要解决")
         if not python_ok:
             print("\n安装 Python 依赖:")
-            print("  pip install -r requirements.txt")
+            print("  uv sync")
         if not tts_ok:
             print("\n确保 TTS 模型在 ./models/ 目录下")
         if not mfa_ok:
             print("\nMFA 模型位置:")
-            print("  声学模型: ~/.mfa/models/acoustic_models/mandarin_mfa")
-            print("  词典: ~/.mfa/models/dictionary_models/mandarin_mfa.dict")
+            print(f"  声学模型: {settings.MFA_ACOUSTIC_MODEL}")
+            print(f"  词典: {settings.MFA_DICTIONARY}")
+            print("  详情: python3 scripts/check_mfa_ready.py")
         return 1
 
 if __name__ == '__main__':

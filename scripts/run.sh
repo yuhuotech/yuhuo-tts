@@ -1,43 +1,63 @@
 #!/bin/bash
 
-# TTS-Alignment-API 启动脚本
-# 此脚本正确设置 PYTHONPATH 并启动应用
+set -euo pipefail
 
-# 获取脚本所在目录
+# TTS-Alignment-API 启动脚本
+# 使用 uv 管理环境并启动应用
+
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
+COSYVOICE_ROOT="$PROJECT_DIR/third_party/CosyVoice"
+MATCHA_ROOT="$COSYVOICE_ROOT/third_party/Matcha-TTS"
+COSYVOICE_RUNTIME_DEPS=(
+    "HyperPyYAML==1.2.3"
+    "hydra-core==1.3.2"
+    "omegaconf==2.3.0"
+    "inflect==7.3.1"
+    "wetext==0.0.4"
+    "conformer==0.3.2"
+    "diffusers==0.29.0"
+    "gdown==5.1.0"
+    "x-transformers==2.11.24"
+    "lightning==2.2.4"
+    "openai-whisper==20231117"
+    "protobuf==4.25.0"
+    "pyarrow==18.1.0"
+    "rich==13.7.1"
+    "wget==3.2"
+)
 
-# 激活虚拟环境
-if [ -f "$PROJECT_DIR/venv/bin/activate" ]; then
-    source "$PROJECT_DIR/venv/bin/activate"
-else
-    echo "❌ 虚拟环境未找到: $PROJECT_DIR/venv"
+if ! command -v uv >/dev/null 2>&1; then
+    echo "❌ 未找到 uv，请先安装 uv"
+    exit 1
+fi
+
+if [ ! -d "$COSYVOICE_ROOT" ]; then
+    echo "❌ 未找到 CosyVoice 源码目录: $COSYVOICE_ROOT"
     echo "请先运行: bash scripts/install.sh"
     exit 1
 fi
 
-# 设置 PYTHONPATH（关键！）
-# 必须包含 CosyVoice 项目中的 Matcha-TTS 模块
-export PYTHONPATH="$PROJECT_DIR/third_party/CosyVoice:$PROJECT_DIR/third_party/CosyVoice/third_party/Matcha-TTS:$PYTHONPATH"
+export PYTHONPATH="$COSYVOICE_ROOT:$MATCHA_ROOT:${PYTHONPATH:-}"
 
 echo "✓ PYTHONPATH 已设置："
 echo "  $PYTHONPATH"
 echo ""
 
-# 验证环境
-python -c "from cosyvoice.cli.cosyvoice import CosyVoice; print('✓ CosyVoice 环境检查通过')" || {
-    echo "❌ CosyVoice 环境检查失败"
-    echo "请确保已运行以下步骤："
-    echo "  1. bash scripts/install.sh（安装脚本）"
-    echo "  2. 检查 $PROJECT_DIR/third_party/CosyVoice 目录是否存在"
-    exit 1
-}
+cd "$PROJECT_DIR"
+
+echo "🔄 使用 uv 同步依赖..."
+uv sync
+
+if ! uv run python -c "from cosyvoice.cli.cosyvoice import AutoModel" >/dev/null 2>&1; then
+    echo ""
+    echo "🔄 检测到 CosyVoice 依赖未就绪，使用 uv 补装第三方依赖..."
+    uv pip install --no-build-isolation "${COSYVOICE_RUNTIME_DEPS[@]}"
+fi
 
 echo ""
 echo "🚀 启动 TTS-Alignment-API..."
 echo "   访问 API 文档: http://0.0.0.0:8000/docs"
 echo ""
 
-# 启动应用
-cd "$PROJECT_DIR"
-uvicorn app:app --host 0.0.0.0 --port 8000 "$@"
+exec uv run uvicorn app:app --host 0.0.0.0 --port 8000 "$@"

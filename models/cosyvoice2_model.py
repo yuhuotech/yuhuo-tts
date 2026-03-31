@@ -12,7 +12,7 @@ class CosyVoice2Model(TTSBase):
     """CosyVoice2 TTS模型"""
 
     def __init__(self):
-        super().__init__("cosyvoice2", device="cuda:0")
+        super().__init__("cosyvoice2")
         self.sample_rate = 22050  # CosyVoice2的采样率
         self._load_model()
 
@@ -20,7 +20,7 @@ class CosyVoice2Model(TTSBase):
         """加载CosyVoice2模型"""
         try:
             # 设置 PYTHONPATH（关键！）- 必须在导入之前
-            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             matcha_path = os.path.join(project_root, "third_party", "CosyVoice", "third_party", "Matcha-TTS")
 
             if os.path.exists(matcha_path) and matcha_path not in sys.path:
@@ -31,13 +31,12 @@ class CosyVoice2Model(TTSBase):
             if os.path.exists(cosyvoice_root) and cosyvoice_root not in sys.path:
                 sys.path.insert(0, cosyvoice_root)
 
-            # 导入 CosyVoice
-            from cosyvoice.cli.cosyvoice import CosyVoice
+            # 导入 CosyVoice 官方自动选择入口，避免 CosyVoice2 模型被当作 CosyVoice1 加载
+            from cosyvoice.cli.cosyvoice import AutoModel
 
             model_dir = os.path.abspath(settings.COSYVOICE_MODEL_DIR)
-            self.model = CosyVoice(model_dir)
-            self.sample_rate = 22050  # CosyVoice2 固定采样率
-            print("✓ CosyVoice2模型加载成功")
+            self.model = AutoModel(model_dir=model_dir)
+            self.sample_rate = getattr(self.model, "sample_rate", 22050)
         except Exception as e:
             raise RuntimeError(f"CosyVoice2模型加载失败: {str(e)}")
 
@@ -70,7 +69,7 @@ class CosyVoice2Model(TTSBase):
                 # SFT 模式 - 使用预训练音色
                 spk_id = speaker or "中文女"
                 for audio_chunk in self.model.inference_sft(
-                    text=text,
+                    tts_text=text,
                     spk_id=spk_id,
                     stream=False
                 ):
@@ -82,15 +81,11 @@ class CosyVoice2Model(TTSBase):
                 if not prompt_audio:
                     raise ValueError("zero_shot 模式需要提供 prompt_audio")
 
-                from cosyvoice.utils.file_utils import load_wav
-
                 prompt_text = kwargs.get("prompt_text", text)
-                prompt_speech = load_wav(prompt_audio, 16000)
-
                 for audio_chunk in self.model.inference_zero_shot(
-                    text=text,
+                    tts_text=text,
                     prompt_text=prompt_text,
-                    prompt_speech=prompt_speech,
+                    prompt_wav=prompt_audio,
                     stream=False
                 ):
                     if "tts_speech" in audio_chunk:
@@ -101,13 +96,9 @@ class CosyVoice2Model(TTSBase):
                 if not prompt_audio:
                     raise ValueError("cross_lingual 模式需要提供 prompt_audio")
 
-                from cosyvoice.utils.file_utils import load_wav
-
-                prompt_speech = load_wav(prompt_audio, 16000)
-
                 for audio_chunk in self.model.inference_cross_lingual(
-                    text=text,
-                    prompt_speech=prompt_speech,
+                    tts_text=text,
+                    prompt_wav=prompt_audio,
                     stream=False
                 ):
                     if "tts_speech" in audio_chunk:
@@ -118,12 +109,23 @@ class CosyVoice2Model(TTSBase):
                 spk_id = speaker or "中文女"
                 instruct_text = kwargs.get("instruct_text", "")
 
-                for audio_chunk in self.model.inference_instruct(
-                    text=text,
-                    spk_id=spk_id,
-                    instruct_text=instruct_text,
-                    stream=False
-                ):
+                infer_method = getattr(self.model, "inference_instruct2", None)
+                if infer_method is not None and prompt_audio:
+                    iterator = infer_method(
+                        tts_text=text,
+                        instruct_text=instruct_text,
+                        prompt_wav=prompt_audio,
+                        stream=False
+                    )
+                else:
+                    iterator = self.model.inference_instruct(
+                        tts_text=text,
+                        spk_id=spk_id,
+                        instruct_text=instruct_text,
+                        stream=False
+                    )
+
+                for audio_chunk in iterator:
                     if "tts_speech" in audio_chunk:
                         audio_list.append(audio_chunk["tts_speech"])
 

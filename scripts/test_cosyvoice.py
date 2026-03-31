@@ -58,7 +58,7 @@ for module_name, display_name in checks:
 print("\n检查 CosyVoice 模块：")
 print("-" * 60)
 try:
-    from cosyvoice.cli.cosyvoice import CosyVoice
+    from cosyvoice.cli.cosyvoice import AutoModel
     print("✓ CosyVoice 导入成功")
 except ImportError as e:
     print(f"✗ CosyVoice 导入失败: {e}")
@@ -85,14 +85,14 @@ print("-" * 60)
 try:
     model_dir = os.path.join(project_root, "models/CosyVoice2-0.5B")
     if os.path.exists(model_dir):
-        from cosyvoice.cli.cosyvoice import CosyVoice
+        from cosyvoice.cli.cosyvoice import AutoModel
         print("正在加载 CosyVoice2 模型（这可能需要一些时间）...")
-        model = CosyVoice(model_dir)
+        model = AutoModel(model_dir=model_dir)
         print("✓ CosyVoice2 模型加载成功")
 
         # 获取可用音色
         try:
-            speakers = model.list_avaliable_spks()
+            speakers = model.list_available_spks()
             print(f"✓ 可用音色: {speakers}")
         except:
             print("⚠️  无法获取音色列表")
@@ -107,11 +107,12 @@ print("\n" + "="*60)
 if all_installed and os.path.exists(os.path.join(project_root, "models/CosyVoice2-0.5B")):
     print("✓ 环境检查通过！可以启动应用")
     print("\n启动命令:")
+    print("  uv sync")
     print("  bash scripts/run.sh")
 else:
     print("✗ 环境检查未完全通过")
     print("\n请执行以下步骤:")
-    print("  1. bash scripts/install.sh         # 安装依赖和下载模型")
-    print("  2. python scripts/test_cosyvoice.py # 验证环境")
-    print("  3. bash scripts/run.sh              # 启动应用")
+    print("  1. bash scripts/install.sh          # 安装依赖和下载模型")
+    print("  2. uv run python scripts/test_cosyvoice.py")
+    print("  3. bash scripts/run.sh")
 print("="*60)

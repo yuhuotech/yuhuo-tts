@@ -1,6 +1,7 @@
 """FastAPI TTS-Alignment 应用"""
 
 from pathlib import Path
+from glob import glob
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,8 +40,8 @@ app = FastAPI(
 # CORS中间件
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=settings.cors_origins,
+    allow_credentials=settings.CORS_ALLOW_CREDENTIALS and settings.cors_origins != ["*"],
     allow_methods=["*"],
     allow_headers=["*"]
 )
@@ -63,14 +64,28 @@ def load_models():
         "qwen3": Qwen3Model,
     }
 
-    for model_name, loader in model_loaders.items():
+    model_name = settings.DEFAULT_TTS_MODEL
+    if model_name not in model_loaders:
+        raise RuntimeError(f"DEFAULT_TTS_MODEL 不支持: {model_name}")
+
+    logger.info("本次仅加载默认模型: %s", model_name)
+
+    loader = model_loaders[model_name]
+    try:
+        models[model_name] = loader()
+        model_status[model_name] = {"status": "loaded", "error": None}
+        logger.info("✓ %s 模型加载成功", model_name)
+    except Exception as e:
+        model_status[model_name] = {"status": "failed", "error": str(e)}
+        logger.exception("%s 模型加载失败", model_name)
+
+    for disabled_model_name in model_loaders:
+        if disabled_model_name == model_name:
+            continue
         try:
-            models[model_name] = loader()
-            model_status[model_name] = {"status": "loaded", "error": None}
-            logger.info("✓ %s 模型加载成功", model_name)
-        except Exception as e:
-            model_status[model_name] = {"status": "failed", "error": str(e)}
-            logger.exception("%s 模型加载失败", model_name)
+            model_status[disabled_model_name] = {"status": "disabled", "error": None}
+        except Exception:
+            pass
 
     if not models:
         raise RuntimeError("没有可用的 TTS 模型，服务无法启动")
@@ -81,8 +96,11 @@ class SynthesizeRequest(BaseModel):
     text: str
     model: Optional[str] = settings.DEFAULT_TTS_MODEL
     mode: Optional[str] = "sft"  # For CosyVoice2
+    language: Optional[str] = "Auto"
     speaker: Optional[str] = None
     prompt_audio: Optional[str] = None
+    uploaded_audio_id: Optional[str] = None
+    prompt_text: Optional[str] = None
     speed: Optional[float] = 1.0
     output_format: Optional[str] = settings.AUDIO_OUTPUT_FORMAT
     save_file: Optional[bool] = True
@@ -93,6 +111,23 @@ class SynthesizeResponse(BaseModel):
     message: str
     data: Optional[dict] = None
     timestamp: str
+
+
+def resolve_prompt_audio(request: SynthesizeRequest) -> Optional[str]:
+    """将上传音频 ID 解析为服务端临时文件路径。"""
+    audio_id = request.uploaded_audio_id or request.prompt_audio
+    if not audio_id:
+        return None
+
+    if request.prompt_audio and os.path.isfile(request.prompt_audio):
+        return request.prompt_audio
+
+    pattern = os.path.join(settings.TEMP_AUDIO_DIR, f"{audio_id}_*")
+    matches = sorted(glob(pattern))
+    if matches:
+        return matches[0]
+
+    raise HTTPException(status_code=404, detail=f"找不到参考音频: {audio_id}")
 
 # API端点
 
@@ -110,7 +145,8 @@ async def health_check():
         "status": "ok" if models else "degraded",
         "timestamp": datetime.now().isoformat(),
         "models": model_status,
-        "mfa_enabled": aligner.enabled
+        "mfa_enabled": aligner.enabled,
+        "mfa_status": aligner.get_status()
     }
 
 @app.post("/synthesize")
@@ -130,14 +166,23 @@ async def synthesize(request: SynthesizeRequest):
 
         # 选择模型
         model = models[request.model]
+        prompt_audio_path = resolve_prompt_audio(request)
+
+        if request.model == "qwen3" and not prompt_audio_path:
+            raise HTTPException(
+                status_code=400,
+                detail="Qwen3-TTS Base 模型需要提供 uploaded_audio_id 或 prompt_audio 作为参考音频"
+            )
 
         # 合成语音
         logger.info("开始语音合成...")
         audio, sample_rate = model.synthesize(
             text=request.text,
             mode=request.mode if request.model == "cosyvoice2" else None,
+            language=request.language,
             speaker=request.speaker,
-            prompt_audio=request.prompt_audio,
+            prompt_audio=prompt_audio_path,
+            prompt_text=request.prompt_text,
             speed=request.speed
         )
 
@@ -261,7 +306,7 @@ async def upload_audio(file: UploadFile = File(...)):
                 "file_id": file_id,
                 "filename": sanitized_name,
                 "size": len(content),
-                "prompt_audio": file_path,
+                "uploaded_audio_id": file_id,
             }
         }
 

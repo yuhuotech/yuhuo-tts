@@ -18,8 +18,8 @@ YuHuo TTS 解决的是“把本地模型能力整理成可调用 API”的问题
 - 双模型接入：统一封装 `CosyVoice2` 和 `Qwen3-TTS`
 - 统一合成接口：通过同一个 `/synthesize` API 调不同模型
 - 多种音频输出：支持 `base64`、文件 URL、或两者同时返回
-- 时间戳对齐：优先使用 MFA，对齐不可用时自动降级
-- 参考音频上传：支持上传音频并将返回值直接作为 `prompt_audio`
+- 时间戳对齐：优先使用 MFA，可配置为失败时不输出或降级均分
+- 参考音频上传：支持上传音频并通过 `uploaded_audio_id` 在后续合成请求中复用
 - 启动容错：允许部分模型加载失败，只要至少有一个模型可用，服务仍可启动
 - Docker 入口：提供容器化部署配置
 - 开源清理完成：环境变量、模型、第三方源码和产物目录已从仓库规范隔离
@@ -66,16 +66,29 @@ YuHuo TTS 解决的是“把本地模型能力整理成可调用 API”的问题
 
 ## Alignment Strategy
 
-项目采用“优先精确、失败降级”的策略：
+项目采用“优先精确、可配置回退”的策略：
 
 - 如果 MFA 可用，则执行真实对齐
-- 如果 MFA 缺失、超时或失败，则退化为均匀时间分配
+- 如果 MFA 缺失、超时或失败，则按 `MFA_FALLBACK_ALIGNMENT` 决定行为
+- `none`: 不输出时间戳，`alignments` 返回空数组
+- `uniform`: 退化为均匀时间分配
 - 因此 API 层不会因为对齐组件异常而整体不可用
 
 这保证了服务可用性，但也意味着：
 
 - 有 MFA 时，时间戳更有参考价值
-- 无 MFA 时，时间戳只适合粗粒度播放控制，不适合高精度字幕
+- 无 MFA 且 `MFA_FALLBACK_ALIGNMENT=uniform` 时，时间戳只适合粗粒度播放控制，不适合高精度字幕
+
+当前 `/health` 会返回 `mfa_status`，其中包含：
+
+- `available`
+- `command_available`
+- `command_path`
+- `command_error`
+- `acoustic_model_path`
+- `dictionary_path`
+- `fallback_alignment`
+- `reason`
 
 ## API Summary
 
@@ -122,11 +135,14 @@ YuHuo TTS 解决的是“把本地模型能力整理成可调用 API”的问题
 - `file_id`
 - `filename`
 - `size`
-- `prompt_audio`
+- `uploaded_audio_id`
 
-其中 `prompt_audio` 可以直接回传给 `/synthesize` 的 `prompt_audio` 参数。
+推荐在 `/synthesize` 中使用 `uploaded_audio_id` 引用已上传文件。
+兼容场景下也可以直接传本地 `prompt_audio` 路径，但那更适合同机部署或可信环境。
 
 ## Quick Start
+
+项目建议使用 Python `3.12`，仓库已通过 [`.python-version`](/Users/hmw/data/www/yuhuo-tts/.python-version) 固定给 `uv`。
 
 ### 1. Prepare config
 
@@ -144,16 +160,17 @@ bash scripts/install.sh
 
 这个脚本会：
 
-- 创建 `venv`
-- 安装 Python 依赖
-- 安装 `Qwen3-TTS` Python 包
+- 使用 `uv` 创建并管理项目环境
+- 同步 Python 依赖
 - 克隆 `third_party/CosyVoice`
 - 下载 CosyVoice2 和 Qwen3-TTS 模型到 `models/`
-- 检查并初始化 MFA 相关依赖
+- 尝试通过项目 `uv` 环境初始化 MFA 模型
+- 安装 MFA 中文对齐需要的分词依赖
 
 ### 3. Start the API
 
 ```bash
+uv sync
 bash scripts/run.sh
 ```
 
@@ -165,8 +182,8 @@ bash scripts/run.sh
 ### 4. Verify installation
 
 ```bash
-python scripts/verify_installation.py
-python scripts/test_api.py
+uv run python scripts/verify_installation.py
+uv run python scripts/test_api.py
 ```
 
 ## Manual Setup
@@ -174,11 +191,9 @@ python scripts/test_api.py
 如果你不想使用安装脚本，至少需要完成这些步骤：
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-pip install git+https://github.com/QwenLM/Qwen3-TTS.git
+uv sync
 git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git third_party/CosyVoice
+uv pip install -r third_party/CosyVoice/requirements.txt
 ```
 
 下载模型：
@@ -194,8 +209,7 @@ modelscope download --model Qwen/Qwen3-TTS-12Hz-1.7B-Base \
 如需真实 MFA 对齐：
 
 ```bash
-mfa model download acoustic mandarin_mfa
-mfa model download dictionary mandarin_mfa
+bash scripts/install_mfa.sh
 ```
 
 ## Configuration
@@ -211,9 +225,26 @@ mfa model download dictionary mandarin_mfa
 - `COSYVOICE_MODEL_DIR`
 - `QWEN3_MODEL_DIR`
 - `MFA_ENABLE`
+- `MFA_FALLBACK_ALIGNMENT`
+- `MFA_ACOUSTIC_MODEL`
+- `MFA_DICTIONARY`
+- `CORS_ORIGINS`
+- `CORS_ALLOW_CREDENTIALS`
 - `AUDIO_OUTPUT_FORMAT`
 - `MAX_FILE_SIZE_MB`
 - `OUTPUT_AUDIO_DIR`
+
+说明：
+
+- `DEFAULT_TTS_MODEL` 控制服务启动时实际加载哪个模型
+- 如果你只想降低本机内存和 CPU 压力，建议设置为 `DEFAULT_TTS_MODEL=cosyvoice2`
+
+## Dependency Management
+
+- 项目依赖由 [`pyproject.toml`](/Users/hmw/data/www/yuhuo-tts/pyproject.toml) 管理
+- 推荐使用 `uv sync` 安装和更新依赖
+- 推荐使用 `uv run ...` 执行脚本和启动服务
+- MFA CLI 优先从当前 `PATH` 或项目 `.venv/bin/mfa` 解析
 
 ## Docker
 
@@ -242,11 +273,12 @@ docker compose up -d --build
 仓库把辅助脚本集中放在 `scripts/`：
 
 - [scripts/install.sh](/Users/hmw/data/www/yuhuo-tts/scripts/install.sh): 一键安装依赖与模型
-- [scripts/run.sh](/Users/hmw/data/www/yuhuo-tts/scripts/run.sh): 启动服务
+- [scripts/run.sh](/Users/hmw/data/www/yuhuo-tts/scripts/run.sh): 使用 `uv` 启动服务
 - [scripts/verify_installation.py](/Users/hmw/data/www/yuhuo-tts/scripts/verify_installation.py): 检查依赖和目录
 - [scripts/test_api.py](/Users/hmw/data/www/yuhuo-tts/scripts/test_api.py): 调用 API 做集成测试
 - [scripts/test_cosyvoice.py](/Users/hmw/data/www/yuhuo-tts/scripts/test_cosyvoice.py): 检查 CosyVoice 环境
 - [scripts/test_mfa_chinese.py](/Users/hmw/data/www/yuhuo-tts/scripts/test_mfa_chinese.py): 检查 MFA 中文对齐
+- [scripts/check_mfa_ready.py](/Users/hmw/data/www/yuhuo-tts/scripts/check_mfa_ready.py): 检查 MFA 命令、模型、词典和回退策略
 
 ## Docs
 

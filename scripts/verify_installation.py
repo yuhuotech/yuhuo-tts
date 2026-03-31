@@ -9,7 +9,11 @@ from pathlib import Path
 import json
 import importlib.util
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT := Path(__file__).resolve().parent.parent) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from config import settings
+from alignment.mfa_aligner import MFAAligner
 
 def check_models():
     """检查模型文件完整性"""
@@ -78,7 +82,7 @@ def check_dependencies():
     print("\n📚 检查 Python 依赖...")
     dependencies = [
         'fastapi', 'uvicorn', 'pydantic', 'torch', 'torchaudio',
-        'librosa', 'soundfile', 'numpy', 'scipy', 'pyyaml',
+        'librosa', 'soundfile', 'numpy', 'scipy', 'yaml',
         'textgrid', 'qwen_tts'
     ]
 
@@ -112,12 +116,19 @@ def check_directories():
 def check_mfa():
     """检查 MFA 安装"""
     print("\n🔤 检查 MFA...")
-    if importlib.util.find_spec("montreal_forced_aligner") is not None:
-        print("  ✅ Montreal Forced Aligner")
-        return True
-    print("  ❌ MFA 未安装")
-    print("     降级方案: 将使用均匀时间分布")
-    return False
+    status = MFAAligner().get_status(force_refresh=True)
+    print(f"  enabled: {status['enabled']}")
+    print(f"  available: {status['available']}")
+    print(f"  command_available: {status['command_available']}")
+    print(f"  command_path: {status['command_path']}")
+    print(f"  command_error: {status['command_error']}")
+    print(f"  声学模型配置: {status['acoustic_model']}")
+    print(f"  声学模型路径: {status['acoustic_model_path']}")
+    print(f"  词典配置: {status['dictionary']}")
+    print(f"  词典路径: {status['dictionary_path']}")
+    print(f"  fallback_alignment: {status['fallback_alignment']}")
+    print(f"  reason: {status['reason']}")
+    return status["available"]
 
 def check_config():
     """检查配置文件"""
@@ -153,7 +164,7 @@ def main():
     if all_ok:
         print("✅ 一切就绪！可以启动 API 服务了")
         print("\n启动命令:")
-        print("  python app.py")
+        print("  bash scripts/run.sh")
         return 0
     else:
         print("⚠️  有些问题需要处理:")
@@ -161,10 +172,10 @@ def main():
             print("  - 模型文件不完整，请继续等待下载")
         if deps_missing:
             print(f"  - 缺失依赖: {', '.join(deps_missing)}")
-            print("    运行: pip install -r requirements.txt")
+            print("    运行: uv sync")
         if not mfa_ok:
-            print("  - MFA 安装有问题")
-            print("    运行: mfa model download acoustic mandarin_mfa")
+            print("  - MFA 安装或模型有问题")
+            print("    运行: python3 scripts/check_mfa_ready.py")
         if not all(dirs_ok.values()):
             print("  - 缺少必要目录")
         return 1

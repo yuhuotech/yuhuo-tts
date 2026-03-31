@@ -5,12 +5,17 @@
 
 import os
 import sys
-import tempfile
 from pathlib import Path
 import numpy as np
 import soundfile as sf
-import subprocess
 import time
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from config import settings
+from alignment.mfa_aligner import MFAAligner
 
 def test_mfa_models_exist():
     """检查 MFA 模型是否已下载"""
@@ -18,15 +23,29 @@ def test_mfa_models_exist():
     print("🔍 检查 MFA 模型文件")
     print("=" * 60)
 
-    acoustic_dir = Path.home() / '.mfa' / 'models' / 'acoustic_models' / 'mandarin_flac'
-    dict_dir = Path.home() / '.mfa' / 'models' / 'g2p_models' / 'mandarin_flac'
+    acoustic_candidates = [
+        Path.home() / '.mfa' / 'models' / 'acoustic_models' / settings.MFA_ACOUSTIC_MODEL,
+        Path.home() / 'Documents' / 'MFA' / 'pretrained_models' / 'acoustic' / f'{settings.MFA_ACOUSTIC_MODEL}.zip',
+    ]
+    dict_candidates = [
+        Path.home() / '.mfa' / 'models' / 'dictionary_models' / f'{settings.MFA_DICTIONARY}.dict',
+        Path.home() / '.mfa' / 'models' / 'g2p_models' / settings.MFA_DICTIONARY,
+        Path.home() / 'Documents' / 'MFA' / 'pretrained_models' / 'dictionary' / f'{settings.MFA_DICTIONARY}.dict',
+    ]
 
-    acoustic_ok = acoustic_dir.exists() and any(acoustic_dir.glob('*'))
-    dict_ok = dict_dir.exists() and any(dict_dir.glob('*'))
+    acoustic_dir = next((p for p in acoustic_candidates if p.exists()), acoustic_candidates[0])
+    dict_dir = next((p for p in dict_candidates if p.exists()), dict_candidates[0])
+
+    acoustic_ok = acoustic_dir.exists()
+    dict_ok = dict_dir.exists()
 
     if acoustic_ok:
-        files = list(acoustic_dir.glob('*'))
-        size = sum(f.stat().st_size for f in files if f.is_file()) / (1024**2)
+        if acoustic_dir.is_file():
+            files = [acoustic_dir]
+            size = acoustic_dir.stat().st_size / (1024**2)
+        else:
+            files = list(acoustic_dir.glob('*'))
+            size = sum(f.stat().st_size for f in files if f.is_file()) / (1024**2)
         print(f"✅ 声学模型（Acoustic Model）")
         print(f"   位置: {acoustic_dir}")
         print(f"   文件数: {len(files)}, 大小: {size:.1f}MB\n")
@@ -34,8 +53,12 @@ def test_mfa_models_exist():
         print(f"❌ 声学模型未找到: {acoustic_dir}\n")
 
     if dict_ok:
-        files = list(dict_dir.glob('*'))
-        size = sum(f.stat().st_size for f in files if f.is_file()) / (1024**2)
+        if dict_dir.is_file():
+            files = [dict_dir]
+            size = dict_dir.stat().st_size / (1024**2)
+        else:
+            files = list(dict_dir.glob('*'))
+            size = sum(f.stat().st_size for f in files if f.is_file()) / (1024**2)
         print(f"✅ 发音词典（Dictionary）")
         print(f"   位置: {dict_dir}")
         print(f"   文件数: {len(files)}, 大小: {size:.1f}MB\n")
@@ -45,7 +68,7 @@ def test_mfa_models_exist():
     return acoustic_ok and dict_ok
 
 def generate_test_audio():
-    """生成测试音频文件（模拟中文语音）"""
+    """生成降级用测试音频（仅在真实语音样本缺失时使用）"""
     print("=" * 60)
     print("🔊 生成测试音频")
     print("=" * 60)
@@ -75,6 +98,27 @@ def generate_test_audio():
 
     return audio, sample_rate
 
+def load_reference_audio():
+    """优先加载真实中文语音样本。"""
+    sample_path = PROJECT_ROOT / "third_party" / "CosyVoice" / "asset" / "zero_shot_prompt.wav"
+    sample_text = "希望你以后能够做的比我还好呦。"
+
+    if sample_path.exists():
+        print("=" * 60)
+        print("🎤 加载真实中文语音样本")
+        print("=" * 60)
+        audio, sample_rate = sf.read(sample_path)
+        print(f"✅ 样本已加载")
+        print(f"   路径: {sample_path}")
+        print(f"   采样率: {sample_rate} Hz")
+        print(f"   时长: {len(audio) / sample_rate:.2f} 秒")
+        print(f"   文本: {sample_text}\n")
+        return audio, sample_rate, sample_text
+
+    print("⚠️  未找到真实语音样本，退回合成正弦波测试\n")
+    audio, sample_rate = generate_test_audio()
+    return audio, sample_rate, "你好世界"
+
 def test_mfa_alignment(audio, sample_rate, text="你好世界"):
     """测试 MFA 中文对齐"""
     print("=" * 60)
@@ -84,96 +128,40 @@ def test_mfa_alignment(audio, sample_rate, text="你好世界"):
     print(f"文本长度: {len(text)} 个字符\n")
 
     try:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir_path = Path(tmpdir)
+        print("⏳ 运行 MFAAligner.align()...")
+        start_time = time.time()
+        alignments = MFAAligner().align(audio, text, sample_rate)
+        elapsed = time.time() - start_time
 
-            # 保存音频
-            audio_path = tmpdir_path / "test_audio.wav"
-            text_path = tmpdir_path / "test_audio.lab"
-            output_dir = tmpdir_path / "output"
-            output_dir.mkdir()
+        print(f"⏱️  耗时: {elapsed:.1f} 秒")
 
-            sf.write(audio_path, audio, sample_rate)
-            with open(text_path, 'w', encoding='utf-8') as f:
-                f.write(text)
+        if not alignments:
+            print("❌ 未返回时间戳\n")
+            return False, None
 
-            print(f"✅ 临时文件已创建")
-            print(f"   音频: {audio_path}")
-            print(f"   文本: {text_path}\n")
+        print("✅ MFA 对齐成功！\n")
+        print("✅ 对齐结果（按时间顺序）：\n")
+        print(f"{'字符':<6} {'开始时间':<12} {'结束时间':<12} {'置信度':<8}")
+        print("-" * 40)
+        for item in alignments[:12]:
+            print(f"{item['char']:<6} {item['start']:<12.3f} {item['end']:<12.3f} {item['confidence']:<8.2f}")
+        if len(alignments) > 12:
+            print(f"... 共 {len(alignments)} 条")
+        print()
 
-            # 运行 MFA 对齐
-            print("⏳ 运行 MFA 对齐...")
-            start_time = time.time()
+        total_duration = len(audio) / sample_rate
+        max_end = max(item['end'] for item in alignments)
 
-            result = subprocess.run([
-                "mfa", "align",
-                str(tmpdir),
-                "mandarin_flac",  # 词典
-                "mandarin_flac",  # 声学模型
-                str(output_dir),
-                "--overwrite",
-                "--single_speaker"
-            ], capture_output=True, text=True, timeout=60)
+        if max_end <= total_duration * 1.1:
+            print(f"✅ 时间戳合理")
+            print(f"   音频时长: {total_duration:.3f} 秒")
+            print(f"   对齐最后位置: {max_end:.3f} 秒\n")
+            return True, alignments
 
-            elapsed = time.time() - start_time
-
-            print(f"⏱️  耗时: {elapsed:.1f} 秒")
-
-            if result.returncode == 0:
-                print("✅ MFA 对齐成功！\n")
-
-                # 检查输出文件
-                textgrid_path = output_dir / "test_audio.TextGrid"
-                if textgrid_path.exists():
-                    print(f"✅ TextGrid 文件已生成")
-                    print(f"   路径: {textgrid_path}")
-                    print(f"   大小: {textgrid_path.stat().st_size} 字节\n")
-
-                    # 解析 TextGrid
-                    try:
-                        alignments = parse_textgrid(textgrid_path)
-                        if alignments:
-                            print("✅ 对齐结果（按时间顺序）：\n")
-                            print(f"{'字符':<6} {'开始时间':<12} {'结束时间':<12} {'置信度':<8}")
-                            print("-" * 40)
-                            for item in alignments:
-                                print(f"{item['char']:<6} {item['start']:<12.3f} {item['end']:<12.3f} {item['confidence']:<8.2f}")
-                            print()
-
-                            # 验证时间戳范围
-                            total_duration = len(audio) / sample_rate
-                            max_end = max(item['end'] for item in alignments)
-
-                            if max_end <= total_duration * 1.1:  # 允许10%的误差
-                                print(f"✅ 时间戳合理")
-                                print(f"   音频时长: {total_duration:.3f} 秒")
-                                print(f"   对齐最后位置: {max_end:.3f} 秒\n")
-                                return True, alignments
-                            else:
-                                print(f"⚠️  时间戳异常")
-                                print(f"   音频时长: {total_duration:.3f} 秒")
-                                print(f"   对齐最后位置: {max_end:.3f} 秒\n")
-                                return False, alignments
-                        else:
-                            print("❌ 无法解析对齐结果\n")
-                            return False, None
-                    except Exception as e:
-                        print(f"⚠️  解析 TextGrid 失败: {e}\n")
-                        return False, None
-                else:
-                    print(f"❌ TextGrid 文件未生成\n")
-                    return False, None
-            else:
-                print(f"❌ MFA 对齐失败")
-                print(f"错误信息:\n{result.stderr}\n")
-                return False, None
-
-    except subprocess.TimeoutExpired:
-        print("❌ MFA 对齐超时\n")
-        return False, None
-    except FileNotFoundError:
-        print("❌ MFA 命令未找到（未安装）\n")
-        return False, None
+        print(f"⚠️  时间戳异常")
+        print(f"   音频时长: {total_duration:.3f} 秒")
+        print(f"   对齐最后位置: {max_end:.3f} 秒\n")
+        return False, alignments
     except Exception as e:
         print(f"❌ 出现异常: {e}\n")
         return False, None
@@ -215,6 +203,17 @@ def main():
     print("╚" + "=" * 58 + "╝")
     print()
 
+    aligner = MFAAligner()
+    status = aligner.get_status(force_refresh=True)
+    print("MFA 状态:")
+    print(f"  available: {status['available']}")
+    print(f"  reason: {status['reason']}")
+    print(f"  command_path: {status['command_path']}")
+    print(f"  command_error: {status['command_error']}")
+    print(f"  acoustic_model_path: {status['acoustic_model_path']}")
+    print(f"  dictionary_path: {status['dictionary_path']}")
+    print()
+
     # 1. 检查模型文件
     models_ok = test_mfa_models_exist()
 
@@ -224,11 +223,11 @@ def main():
         print("   或检查: ~/.mfa/models/")
         return 1
 
-    # 2. 生成测试音频
-    audio, sample_rate = generate_test_audio()
+    # 2. 加载真实样本，缺失时退回合成音
+    audio, sample_rate, sample_text = load_reference_audio()
 
     # 3. 测试 MFA 对齐
-    success, alignments = test_mfa_alignment(audio, sample_rate, text="你好世界")
+    success, alignments = test_mfa_alignment(audio, sample_rate, text=sample_text)
 
     if not success:
         print("⚠️  MFA 对齐测试失败")

@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
+    CORS_ORIGINS: str = "*"
+    CORS_ALLOW_CREDENTIALS: bool = False
 
     # TTS模型配置
     DEFAULT_TTS_MODEL: Literal["cosyvoice2", "qwen3"] = "cosyvoice2"
@@ -35,8 +37,10 @@ class Settings(BaseSettings):
     # MFA配置
     MFA_ACOUSTIC_MODEL: str = "mandarin_mfa"
     MFA_DICTIONARY: str = "mandarin_mfa"
+    MFA_COMMAND: str = "mfa"
     MFA_ENABLE: bool = True
     MFA_TIMEOUT: int = 120
+    MFA_FALLBACK_ALIGNMENT: Literal["none", "uniform"] = "none"
 
     # 文件配置
     TEMP_AUDIO_DIR: str = "./temp_audio"
@@ -56,5 +60,10 @@ class Settings(BaseSettings):
         for dir_path in [self.TEMP_AUDIO_DIR, self.OUTPUT_AUDIO_DIR, self.LOG_DIR]:
             os.makedirs(dir_path, exist_ok=True)
 
+    @property
+    def cors_origins(self) -> list[str]:
+        if self.CORS_ORIGINS.strip() == "*":
+            return ["*"]
+        return [item.strip() for item in self.CORS_ORIGINS.split(",") if item.strip()]
 
 settings = Settings()
