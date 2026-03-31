@@ -2,6 +2,10 @@
 
 # 检查后台下载任务状态
 
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
+cd "$PROJECT_DIR"
+
 echo "=========================================="
 echo "📥 TTS-Alignment-API 下载进度检查"
 echo "=========================================="
@@ -97,7 +101,7 @@ else
     echo "⏳ 等待模型下载完成..."
     echo ""
     echo "重新运行此脚本检查进度:"
-    echo "  bash check_download_status.sh"
+    echo "  bash scripts/check_download_status.sh"
 fi
 
 echo ""

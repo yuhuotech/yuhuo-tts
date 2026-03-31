@@ -28,13 +28,16 @@
 .
 ├── app.py
 ├── config.py
+├── scripts/
+│   ├── install.sh
+│   ├── run.sh
+│   ├── test_api.py
+│   └── verify_installation.py
 ├── models/
 │   ├── cosyvoice2_model.py
 │   └── qwen3_model.py
 ├── alignment/
 ├── utils/
-├── install.sh
-├── run.sh
 ├── .env.example
 └── .env.cloud.example
 ```
@@ -59,7 +62,7 @@ cp .env.example .env
 推荐直接使用安装脚本：
 
 ```bash
-bash install.sh
+bash scripts/install.sh
 ```
 
 它会执行这些步骤：
@@ -74,7 +77,7 @@ bash install.sh
 ### 3. 启动服务
 
 ```bash
-bash run.sh
+bash scripts/run.sh
 ```
 
 服务默认监听 `http://localhost:8000`。

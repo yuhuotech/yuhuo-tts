@@ -33,13 +33,13 @@
 
 ```bash
 # 每 10 秒自动刷新一次
-watch -n 10 bash check_mfa_download.sh
+watch -n 10 bash scripts/check_mfa_download.sh
 ```
 
 ### 单次检查
 
 ```bash
-bash check_mfa_download.sh
+bash scripts/check_mfa_download.sh
 ```
 
 ### 预期输出（完成时）
@@ -49,7 +49,7 @@ bash check_mfa_download.sh
 ✅ 所有模型已下载完成！
 
 下一步：
-1. 运行测试脚本: python test_mfa_chinese.py
+1. 运行测试脚本: python scripts/test_mfa_chinese.py
 2. 启动 API 服务: python app.py
 ```
 
@@ -60,7 +60,7 @@ bash check_mfa_download.sh
 **等待下载完成后**，运行测试脚本：
 
 ```bash
-python test_mfa_chinese.py
+python scripts/test_mfa_chinese.py
 ```
 
 ### 预期输出
@@ -146,10 +146,10 @@ INFO:     Uvicorn running on http://0.0.0.0:8000
 
 ```
 1️⃣  下载 MFA 模型 (5-15 分钟)
-    bash check_mfa_download.sh
+    bash scripts/check_mfa_download.sh
 
 2️⃣  验证中文对齐 (1-2 分钟)
-    python test_mfa_chinese.py
+    python scripts/test_mfa_chinese.py
 
 3️⃣  启动 API 服务
     python app.py
@@ -169,13 +169,13 @@ INFO:     Uvicorn running on http://0.0.0.0:8000
 
 ```bash
 # 监控下载
-watch -n 10 bash check_mfa_download.sh
+watch -n 10 bash scripts/check_mfa_download.sh
 
 # 检查一次
-bash check_mfa_download.sh
+bash scripts/check_mfa_download.sh
 
 # 测试对齐
-python test_mfa_chinese.py
+python scripts/test_mfa_chinese.py
 
 # 启动服务
 python app.py
@@ -205,7 +205,7 @@ modelscope download --model speech_lab/mandarin_flac_dict --local_dir ~/.mfa/mod
 ### Q: 如何验证下载完整性？
 A: 运行测试脚本：
 ```bash
-python test_mfa_chinese.py
+python scripts/test_mfa_chinese.py
 ```
 
 ### Q: 时间戳精度不好怎么办？
@@ -259,8 +259,8 @@ ls ~/.mfa/models/g2p_models/mandarin_flac/
 ## ✨ 最终检查清单
 
 - [ ] 下载任务已启动
-- [ ] 已运行 `bash check_mfa_download.sh` 验证下载
-- [ ] 已运行 `python test_mfa_chinese.py` 测试对齐
+- [ ] 已运行 `bash scripts/check_mfa_download.sh` 验证下载
+- [ ] 已运行 `python scripts/test_mfa_chinese.py` 测试对齐
 - [ ] 测试通过显示 "✅ MFA 中文模型已准备就绪"
 - [ ] 所有 TTS 模型已完整（CosyVoice2 + Qwen3-TTS）
 - [ ] Python 依赖已安装 (`pip install -r requirements.txt`)
@@ -275,7 +275,7 @@ ls ~/.mfa/models/g2p_models/mandarin_flac/
 tail -f logs/app.log
 
 # 运行完整的验证
-python verify_installation.py
+python scripts/verify_installation.py
 
 # 查看 MFA 模型详情
 python3 << 'EOF'

@@ -6,6 +6,9 @@
 import os
 import sys
 from pathlib import Path
+import importlib.util
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 def check_tts_models():
     """检查 TTS 模型"""
@@ -26,7 +29,7 @@ def check_tts_models():
         ]
     }
 
-    base_path = Path('./models')
+    base_path = PROJECT_ROOT / 'models'
     all_ok = True
 
     for model, files in models.items():
@@ -61,11 +64,11 @@ def check_mfa_models():
     print("🔤 MFA 中文模型检查")
     print("=" * 60)
 
-    mfa_path = Path.home() / 'Documents' / 'MFA' / 'pretrained_models'
+    mfa_path = Path.home() / '.mfa' / 'models'
     models_ok = True
 
     # 检查声学模型
-    acoustic_path = mfa_path / 'acoustic' / 'mandarin_mfa.zip'
+    acoustic_path = mfa_path / 'acoustic_models' / 'mandarin_mfa'
     print(f"\n声学模型 (mandarin_mfa):")
     if acoustic_path.exists():
         size_mb = acoustic_path.stat().st_size / (1024**2)
@@ -76,7 +79,7 @@ def check_mfa_models():
         models_ok = False
 
     # 检查词典
-    dict_path = mfa_path / 'dictionary' / 'mandarin_mfa.dict'
+    dict_path = mfa_path / 'dictionary_models' / 'mandarin_mfa.dict'
     print(f"\n词典 (mandarin_mfa):")
     if dict_path.exists():
         size_mb = dict_path.stat().st_size / (1024**2)
@@ -98,8 +101,8 @@ def check_config():
 
     # 检查 .env
     print("\n.env 文件:")
-    if Path('.env').exists():
-        with open('.env', 'r') as f:
+    if (PROJECT_ROOT / '.env').exists():
+        with open(PROJECT_ROOT / '.env', 'r') as f:
             content = f.read()
             if 'mandarin_mfa' in content:
                 print("  ✅ MFA 模型配置正确 (mandarin_mfa)")
@@ -112,8 +115,8 @@ def check_config():
 
     # 检查 config.py
     print("\nconfig.py 文件:")
-    if Path('config.py').exists():
-        with open('config.py', 'r') as f:
+    if (PROJECT_ROOT / 'config.py').exists():
+        with open(PROJECT_ROOT / 'config.py', 'r') as f:
             content = f.read()
             if 'mandarin_mfa' in content:
                 print("  ✅ MFA 模型配置正确 (mandarin_mfa)")
@@ -144,7 +147,8 @@ def check_python_packages():
     missing = []
     for pkg in packages:
         try:
-            __import__(pkg)
+            if importlib.util.find_spec(pkg) is None:
+                raise ImportError(pkg)
             print(f"  ✅ {pkg}")
         except ImportError:
             print(f"  ❌ {pkg}")
@@ -198,8 +202,8 @@ def main():
             print("\n确保 TTS 模型在 ./models/ 目录下")
         if not mfa_ok:
             print("\nMFA 模型位置:")
-            print("  声学模型: ~/Documents/MFA/pretrained_models/acoustic/mandarin_mfa.zip")
-            print("  词典: ~/Documents/MFA/pretrained_models/dictionary/mandarin_mfa.dict")
+            print("  声学模型: ~/.mfa/models/acoustic_models/mandarin_mfa")
+            print("  词典: ~/.mfa/models/dictionary_models/mandarin_mfa.dict")
         return 1
 
 if __name__ == '__main__':

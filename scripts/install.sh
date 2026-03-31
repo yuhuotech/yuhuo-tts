@@ -2,9 +2,13 @@
 
 # TTS-Alignment-API 完整安装脚本
 # 用于 Linux 服务器部署
-# 使用方法: bash install.sh
+# 使用方法: bash scripts/install.sh
 
 set -e
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
+cd "$PROJECT_DIR"
 
 echo ""
 echo "╔════════════════════════════════════════════════════════════════╗"
@@ -17,7 +21,6 @@ echo ""
 # 配置
 PYTHON_VERSION="3.10"
 VENV_DIR="venv"
-PROJECT_DIR="$(pwd)"
 MODELS_DIR="$PROJECT_DIR/models"
 TEMP_DIR="/tmp/tts-downloads"
 

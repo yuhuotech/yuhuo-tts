@@ -9,7 +9,7 @@ import os
 import importlib.util
 
 # 自动设置 PYTHONPATH
-project_root = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 matcha_path = os.path.join(project_root, 'third_party/CosyVoice/third_party/Matcha-TTS')
 if os.path.exists(matcha_path):
     sys.path.insert(0, matcha_path)
@@ -98,7 +98,7 @@ try:
             print("⚠️  无法获取音色列表")
     else:
         print(f"⚠️  模型未下载: {model_dir}")
-        print("   请运行: bash install.sh")
+        print("   请运行: bash scripts/install.sh")
 except Exception as e:
     print(f"✗ 模型加载失败: {e}")
 
@@ -107,11 +107,11 @@ print("\n" + "="*60)
 if all_installed and os.path.exists(os.path.join(project_root, "models/CosyVoice2-0.5B")):
     print("✓ 环境检查通过！可以启动应用")
     print("\n启动命令:")
-    print("  bash run.sh")
+    print("  bash scripts/run.sh")
 else:
     print("✗ 环境检查未完全通过")
     print("\n请执行以下步骤:")
-    print("  1. bash install.sh         # 安装依赖和下载模型")
-    print("  2. python test_cosyvoice.py # 验证环境")
-    print("  3. bash run.sh              # 启动应用")
+    print("  1. bash scripts/install.sh         # 安装依赖和下载模型")
+    print("  2. python scripts/test_cosyvoice.py # 验证环境")
+    print("  3. bash scripts/run.sh              # 启动应用")
 print("="*60)

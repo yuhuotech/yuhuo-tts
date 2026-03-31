@@ -6,7 +6,7 @@
 cd /Users/hmw/data/www/yuhuo-tts
 
 # 检查模型是否完整
-python verify_installation.py
+python scripts/verify_installation.py
 ```
 
 ## 步骤 1: 创建虚拟环境（推荐）
@@ -84,7 +84,7 @@ http://localhost:8000/docs
 
 ### 方式 2: 运行测试脚本
 ```bash
-python test_api.py
+python scripts/test_api.py
 ```
 
 ### 方式 3: 使用 curl 测试

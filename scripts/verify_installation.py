@@ -9,10 +9,12 @@ from pathlib import Path
 import json
 import importlib.util
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 def check_models():
     """检查模型文件完整性"""
     print("\n📦 检查模型文件...")
-    models_dir = Path("./models")
+    models_dir = PROJECT_ROOT / "models"
     results = {}
 
     # 检查 CosyVoice2
@@ -32,7 +34,7 @@ def check_models():
     cosyvoice2_ok = all((cosyvoice2_dir / f).exists() for f in cosyvoice2_files)
     results['CosyVoice2'] = {
         'status': '✅' if cosyvoice2_ok else '❌',
-        'path': str(cosyvoice2_dir),
+        'path': str(cosyvoice2_dir.relative_to(PROJECT_ROOT)),
         'missing': [f for f in cosyvoice2_files if not (cosyvoice2_dir / f).exists()]
     }
     print(f"  CosyVoice2: {results['CosyVoice2']['status']}")
@@ -53,7 +55,7 @@ def check_models():
     qwen3_ok = all((qwen3_dir / f).exists() for f in qwen3_files)
     results['Qwen3-TTS'] = {
         'status': '✅' if qwen3_ok else '❌',
-        'path': str(qwen3_dir),
+        'path': str(qwen3_dir.relative_to(PROJECT_ROOT)),
         'missing': [f for f in qwen3_files if not (qwen3_dir / f).exists()]
     }
     print(f"  Qwen3-TTS: {results['Qwen3-TTS']['status']}")
@@ -101,7 +103,7 @@ def check_directories():
     results = {}
     for d in dirs:
         path = Path(d)
-        exists = path.exists()
+        exists = (PROJECT_ROOT / path).exists()
         results[d] = exists
         print(f"  {'✅' if exists else '❌'} {d}")
 
@@ -123,7 +125,7 @@ def check_config():
     config_files = ['.env', 'config.py', 'requirements.txt']
 
     for f in config_files:
-        exists = Path(f).exists()
+        exists = (PROJECT_ROOT / f).exists()
         print(f"  {'✅' if exists else '❌'} {f}")
 
 def main():

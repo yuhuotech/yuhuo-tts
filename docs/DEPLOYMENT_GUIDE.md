@@ -51,10 +51,10 @@ cd /opt/tts-api
 
 ```bash
 # 给脚本执行权限
-chmod +x install.sh
+chmod +x scripts/install.sh
 
 # 运行安装脚本（会自动完成所有步骤）
-bash install.sh
+bash scripts/install.sh
 
 # 这个过程会：
 # ✅ 创建虚拟环境
@@ -268,7 +268,7 @@ ps aux | grep python | grep app.py
 
 - [ ] 系统环境准备（Python 3.10+, 16GB+ RAM）
 - [ ] 项目文件复制到服务器
-- [ ] 运行 `bash install.sh` 完整安装
+- [ ] 运行 `bash scripts/install.sh` 完整安装
 - [ ] 验证所有模型下载成功
 - [ ] 测试 API 启动和基本功能
 - [ ] 配置 Nginx 反向代理
@@ -384,7 +384,7 @@ nvidia-smi pmon -i 0
 
 **使用 install.sh 脚本:**
 ```bash
-bash install.sh  # 一键完成所有安装
+bash scripts/install.sh  # 一键完成所有安装
 ```
 
 **手动安装:**

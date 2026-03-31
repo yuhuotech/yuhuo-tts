@@ -77,7 +77,7 @@ curl -X POST http://localhost:8000/synthesize \
   -d '{"text": "你好世界", "model": "cosyvoice2"}'
 
 # 完整测试套件
-python test_api.py
+python scripts/test_api.py
 ```
 
 ## 方案 B: Docker 部署

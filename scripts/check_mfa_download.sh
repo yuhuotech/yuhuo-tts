@@ -2,6 +2,10 @@
 
 # 检查 MFA 中文模型下载进度
 
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
+cd "$PROJECT_DIR"
+
 echo ""
 echo "=========================================="
 echo "📥 MFA 中文模型下载监控"
@@ -63,7 +67,7 @@ if [ -f "$acoustic_dir/final.mdl" ] || [ -f "$acoustic_dir"/*.mdl ] || [ "$(find
         echo "✅ 所有模型已下载完成！"
         echo ""
         echo "下一步："
-        echo "1. 运行测试脚本: python test_mfa_chinese.py"
+        echo "1. 运行测试脚本: python scripts/test_mfa_chinese.py"
         echo "2. 启动 API 服务: python app.py"
         echo ""
         exit 0
@@ -77,7 +81,7 @@ echo "- 声学模型: 约 250-300MB"
 echo "- 词典: 约 10-20MB"
 echo "- 总耗时: 通常 5-15 分钟"
 echo ""
-echo "重新检查: bash check_mfa_download.sh"
+echo "重新检查: bash scripts/check_mfa_download.sh"
 echo ""
 
 exit 1
