@@ -1,19 +1,31 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
 cd "$PROJECT_DIR"
+
+MFA_CMD=""
+
+find_mfa_command() {
+    if uv run mfa version >/dev/null 2>&1; then
+        MFA_CMD="uv run mfa"
+        return 0
+    fi
+    if command -v mfa >/dev/null 2>&1 && mfa version >/dev/null 2>&1; then
+        MFA_CMD="mfa"
+        return 0
+    fi
+    return 1
+}
 
 if ! command -v uv >/dev/null 2>&1; then
     echo "❌ 未找到 uv，请先安装 uv"
     exit 1
 fi
 
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "MFA 安装与验收"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
 echo "1. 同步项目依赖"
@@ -21,21 +33,26 @@ uv sync
 
 echo ""
 echo "2. 检查 MFA CLI"
-if uv run mfa --version >/dev/null 2>&1; then
-    echo "✅ MFA CLI 可用（来自项目 uv 环境）"
+if find_mfa_command; then
+    echo "✅ MFA CLI 可用"
+    echo "   使用命令: $MFA_CMD"
 else
     echo "❌ MFA CLI 不可用"
     echo ""
-    echo "请先安装 MFA，可选方式："
+    echo "请先安装 MFA。推荐方式："
     echo "  conda install -c conda-forge montreal-forced-aligner -y"
-    echo "或确认 uv sync 没有失败，再重新执行本脚本。"
+    echo ""
+    echo "Ubuntu 可先准备基础工具："
+    echo "  sudo apt update && sudo apt install -y git curl build-essential ffmpeg"
+    echo "CentOS/RHEL 可先准备基础工具："
+    echo "  sudo yum install -y git curl gcc gcc-c++ make ffmpeg"
     exit 1
 fi
 
 echo ""
 echo "3. 下载中文模型"
-uv run mfa model download acoustic mandarin_mfa
-uv run mfa model download dictionary mandarin_mfa
+$MFA_CMD model download acoustic mandarin_mfa
+$MFA_CMD model download dictionary mandarin_mfa
 
 echo ""
 echo "4. 检查中文分词依赖"

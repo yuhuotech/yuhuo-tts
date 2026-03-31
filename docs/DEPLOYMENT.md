@@ -3,81 +3,79 @@
 ## 前置条件
 
 ### 系统需求
-- Ubuntu 20.04+ / CentOS 8+ / MacOS 12+ / Windows 10+
-- NVIDIA GPU with CUDA 11.8+
-- 16GB+ RAM, 20GB+ 存储
 
-### 软件依赖
-- Python 3.10+
-- Docker 20.10+ (可选)
-- conda (推荐)
+- Ubuntu 20.04+ / CentOS 8+ / Rocky / AlmaLinux / macOS 12+
+- 建议 16GB+ 内存
+- 建议 20GB+ 可用磁盘
+- GPU 可选，CPU 也能跑，但更慢
+
+### Linux 基础依赖
+
+Ubuntu / Debian:
+
+```bash
+sudo apt update
+sudo apt install -y git curl build-essential ffmpeg
+```
+
+CentOS / RHEL / Rocky / AlmaLinux:
+
+```bash
+sudo yum install -y git curl gcc gcc-c++ make ffmpeg
+```
+
+较新的系统也可以用：
+
+```bash
+sudo dnf install -y git curl gcc gcc-c++ make ffmpeg
+```
 
 ## 方案 A: 本地部署
 
-### 第1步: 环境准备
+### 推荐方式
 
 ```bash
-cd /data/www/yuhuo-tts
-
-conda create -n tts-api python=3.10 -y
-conda activate tts-api
-
-pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
-conda install -c conda-forge montreal-forced-aligner -y
+git clone https://github.com/yuhuotech/yuhuo-tts.git
+cd yuhuo-tts
+bash scripts/install.sh
+bash scripts/run.sh
 ```
 
-### 第2步: 下载模型
+安装脚本会自动：
+
+- 准备 `.env`
+- 安装或检测 `uv`
+- 同步 Python 依赖
+- 克隆 CosyVoice
+- 下载 `DEFAULT_TTS_MODEL` 对应模型
+- 在 `MFA_ENABLE=True` 时安装和验收 MFA
+
+### 手动方式
 
 ```bash
-# CosyVoice2 (必需)
-modelscope download --model FunAudioLLM/CosyVoice2-0.5B \
-  --local_dir pretrained_models/CosyVoice2-0.5B
-
-# Qwen3-TTS (可选)
-modelscope download --model Qwen/Qwen3-TTS-12Hz-1.7B-Base \
-  --local_dir pretrained_models/Qwen3-TTS-12Hz-1.7B-Base
-
-# MFA 模型 (必需)
-mfa model download acoustic chinese_flac
-mfa model download dictionary chinese_flac
+cp .env.example .env
+uv sync
+git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git third_party/CosyVoice
+uv pip install --no-build-isolation HyperPyYAML==1.2.3 hydra-core==1.3.2 omegaconf==2.3.0 inflect==7.3.1 wetext==0.0.4 conformer==0.3.2 diffusers==0.29.0 gdown==5.1.0 x-transformers==2.11.24 lightning==2.2.4 openai-whisper==20231117 protobuf==4.25.0 pyarrow==18.1.0 rich==13.7.1 wget==3.2
 ```
 
-### 第3步: 配置
-
-编辑 `.env` 文件根据需要修改配置。关键配置项：
-- API_HOST: API 监听地址 (0.0.0.0 表示所有地址)
-- API_PORT: API 端口 (默认 8000)
-- DEFAULT_TTS_MODEL: 默认模型
-- LOG_LEVEL: 日志级别
-
-### 第4步: 启动
+如需真实 MFA 对齐：
 
 ```bash
-python app.py
+bash scripts/install_mfa.sh
 ```
 
-输出应如下：
-```
-✓ CosyVoice2模型加载成功
-✓ Qwen3-TTS模型加载成功
-✓ 所有模型加载成功
-INFO:     Uvicorn running on http://0.0.0.0:8000
-```
+### 启动
 
-### 第5步: 测试
-
-在新终端：
 ```bash
-# 健康检查
-curl http://localhost:8000/health
+bash scripts/run.sh
+```
 
-# 合成测试
-curl -X POST http://localhost:8000/synthesize \
-  -H "Content-Type: application/json" \
-  -d '{"text": "你好世界", "model": "cosyvoice2"}'
+### 测试
 
-# 完整测试套件
-python scripts/test_api.py
+```bash
+curl http://127.0.0.1:8000/health
+uv run python scripts/test_api.py
 ```
 
 ## 方案 B: Docker 部署

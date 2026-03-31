@@ -1,26 +1,18 @@
 #!/bin/bash
 
-# TTS-Alignment-API 完整安装脚本
-# 用于 Linux 服务器部署
-# 使用方法: bash scripts/install.sh
-
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
 cd "$PROJECT_DIR"
 
-echo ""
-echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║       🚀 TTS-Alignment-API 完整安装脚本                        ║"
-echo "║                                                                ║"
-echo "║       该脚本将自动安装所有依赖和模型                          ║"
-echo "╚════════════════════════════════════════════════════════════════╝"
-echo ""
-
-# 配置
 MODELS_DIR="$PROJECT_DIR/models"
-TEMP_DIR="/tmp/tts-downloads"
+COSYVOICE_ROOT="$PROJECT_DIR/third_party/CosyVoice"
+ENV_FILE="$PROJECT_DIR/.env"
+ENV_EXAMPLE="$PROJECT_DIR/.env.example"
+OS_NAME="$(uname -s)"
+DISTRO_ID=""
+
 COSYVOICE_RUNTIME_DEPS=(
     "HyperPyYAML==1.2.3"
     "hydra-core==1.3.2"
@@ -39,316 +31,170 @@ COSYVOICE_RUNTIME_DEPS=(
     "wget==3.2"
 )
 
-# 颜色定义
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+green() { printf '\033[0;32m%s\033[0m\n' "$1"; }
+yellow() { printf '\033[1;33m%s\033[0m\n' "$1"; }
+red() { printf '\033[0;31m%s\033[0m\n' "$1"; }
+die() { red "❌ $1"; exit 1; }
 
-# 函数：打印成功消息
-success() {
-    echo -e "${GREEN}✅ $1${NC}"
+need_cmd() {
+    command -v "$1" >/dev/null 2>&1 || die "未找到 $1，请先安装"
 }
 
-# 函数：打印错误消息
-error() {
-    echo -e "${RED}❌ $1${NC}"
-    exit 1
+detect_linux_distro() {
+    if [ "$OS_NAME" != "Linux" ]; then
+        return
+    fi
+    if [ -f /etc/os-release ]; then
+        DISTRO_ID="$(. /etc/os-release && printf '%s' "${ID:-}")"
+    fi
 }
 
-# 函数：打印警告消息
-warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
-}
-
-# 函数：检查命令是否存在
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-# ============================================================
-# Step 1: 检查系统依赖
-# ============================================================
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 1: 检查系统依赖"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-
-# 检查 Python
-if command_exists python3; then
-    PYTHON_CMD="python3"
-    PYTHON_VER=$($PYTHON_CMD --version | cut -d' ' -f2)
-    success "Python $PYTHON_VER 已安装"
-else
-    error "Python3 未找到，请先安装 Python 3.10+"
-fi
-
-# 检查 pip
-if command_exists pip3; then
-    success "pip3 已安装"
-else
-    error "pip3 未找到，请先安装"
-fi
-
-# 检查 git（可选）
-if command_exists git; then
-    success "git 已安装"
-else
-    warning "git 未安装（可选）"
-fi
-
-# ============================================================
-# Step 2: 检查 uv
-# ============================================================
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 2: 检查 uv"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-
-if command_exists uv; then
-    success "uv 已安装"
-else
-    error "未找到 uv，请先安装 uv: https://docs.astral.sh/uv/"
-fi
-
-# ============================================================
-# Step 3: 创建目录结构
-# ============================================================
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 5: 创建目录结构"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-
-mkdir -p "$MODELS_DIR"
-mkdir -p temp_audio
-mkdir -p output_audio
-mkdir -p logs
-mkdir -p "$TEMP_DIR"
-mkdir -p third_party
-
-success "目录结构创建完成"
-
-# ============================================================
-# Step 3.2: 克隆 CosyVoice 官方仓库
-# ============================================================
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 5.2: 克隆 CosyVoice 官方仓库"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-
-if [ -d "third_party/CosyVoice" ]; then
-    warning "CosyVoice 仓库已存在，跳过克隆"
-else
-    echo "克隆官方 CosyVoice 仓库（包含子模块）..."
-    # 重要：必须添加 --recursive 参数以下载 Matcha-TTS 子模块
-    if git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git third_party/CosyVoice; then
-        success "CosyVoice 仓库克隆完成"
-    else
-        # 如果克隆失败，尝试分步进行
-        echo "尝试分步克隆..."
-        if git clone https://github.com/FunAudioLLM/CosyVoice.git third_party/CosyVoice; then
-            cd third_party/CosyVoice
-            git submodule update --init --recursive
-            cd ../../
-            success "CosyVoice 仓库克隆完成（通过分步方式）"
-        else
-            error "CosyVoice 仓库克隆失败"
-        fi
+print_linux_hints() {
+    if [ "$OS_NAME" != "Linux" ]; then
+        return
     fi
 
-fi
+    case "$DISTRO_ID" in
+        ubuntu|debian)
+            echo "检测到 Linux 发行版: ${DISTRO_ID:-unknown}"
+            echo "如缺系统依赖，可先执行："
+            echo "  sudo apt update"
+            echo "  sudo apt install -y git curl build-essential ffmpeg"
+            ;;
+        centos|rhel|rocky|almalinux)
+            echo "检测到 Linux 发行版: ${DISTRO_ID:-unknown}"
+            echo "如缺系统依赖，可先执行："
+            echo "  sudo yum install -y git curl gcc gcc-c++ make ffmpeg"
+            echo "或较新系统使用："
+            echo "  sudo dnf install -y git curl gcc gcc-c++ make ffmpeg"
+            ;;
+        *)
+            echo "检测到 Linux 系统"
+            echo "请确保已安装 git、curl、编译工具链和 ffmpeg"
+            ;;
+    esac
+    echo ""
+}
 
-# ============================================================
-# Step 4: 使用 uv 同步 Python 依赖
-# ============================================================
+ensure_uv() {
+    if command -v uv >/dev/null 2>&1; then
+        return
+    fi
+
+    command -v curl >/dev/null 2>&1 || die "未找到 uv，且无法自动安装，因为缺少 curl"
+
+    echo "未找到 uv，尝试自动安装..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+
+    if [ -x "$HOME/.local/bin/uv" ]; then
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+
+    command -v uv >/dev/null 2>&1 || die "uv 自动安装失败，请手动安装后重试"
+}
+
+read_env_value() {
+    local key="$1"
+    local file="$2"
+    local line
+    line="$(grep -E "^${key}=" "$file" | tail -n 1 || true)"
+    if [ -z "$line" ]; then
+        return 1
+    fi
+    printf '%s' "${line#*=}"
+}
+
+download_model() {
+    local model_name="$1"
+    local local_dir="$2"
+    local marker="$3"
+
+    if [ -f "$local_dir/$marker" ]; then
+        green "✅ 模型已存在: $local_dir"
+        return
+    fi
+
+    echo "📥 下载模型: $model_name"
+    uv run modelscope download --model "$model_name" --local_dir "$local_dir"
+    [ -f "$local_dir/$marker" ] || die "模型下载失败: $model_name"
+    green "✅ 模型下载完成: $model_name"
+}
+
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 4: 使用 uv 同步 Python 依赖"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "YuHuo TTS 一键安装"
 echo ""
 
-echo "同步项目依赖（这可能需要 5-10 分钟）..."
+detect_linux_distro
+print_linux_hints
+
+need_cmd python3
+need_cmd git
+ensure_uv
+
+[ -f "$ENV_FILE" ] || cp "$ENV_EXAMPLE" "$ENV_FILE"
+
+DEFAULT_TTS_MODEL="$(read_env_value DEFAULT_TTS_MODEL "$ENV_FILE" || true)"
+MFA_ENABLE_VALUE="$(read_env_value MFA_ENABLE "$ENV_FILE" || true)"
+
+[ -n "$DEFAULT_TTS_MODEL" ] || DEFAULT_TTS_MODEL="cosyvoice2"
+[ -n "$MFA_ENABLE_VALUE" ] || MFA_ENABLE_VALUE="True"
+
+mkdir -p "$MODELS_DIR" temp_audio output_audio logs third_party
+
+echo "1. 同步 Python 依赖"
 uv sync
 
-if [ -f "third_party/CosyVoice/requirements.txt" ]; then
-    echo "同步 CosyVoice 依赖..."
-    uv pip install --no-build-isolation "${COSYVOICE_RUNTIME_DEPS[@]}"
-    success "CosyVoice 依赖安装完成"
+echo ""
+echo "2. 准备 CosyVoice 源码"
+if [ -d "$COSYVOICE_ROOT" ]; then
+    green "✅ 已存在: $COSYVOICE_ROOT"
 else
-    warning "找不到 CosyVoice requirements.txt"
+    git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git "$COSYVOICE_ROOT"
+    green "✅ CosyVoice 克隆完成"
 fi
 
-if uv run python -c "import spacy_pkuseg, dragonmapper, hanziconv" >/dev/null 2>&1; then
-    success "MFA 中文分词依赖已安装"
+echo ""
+echo "3. 安装 CosyVoice 运行时依赖"
+uv pip install --no-build-isolation "${COSYVOICE_RUNTIME_DEPS[@]}"
+green "✅ CosyVoice 运行时依赖已安装"
+
+echo ""
+echo "4. 下载默认模型"
+case "$DEFAULT_TTS_MODEL" in
+    cosyvoice2)
+        download_model "iic/CosyVoice2-0.5B" "$MODELS_DIR/CosyVoice2-0.5B" "llm.pt"
+        ;;
+    qwen3)
+        download_model "Qwen/Qwen3-TTS-12Hz-1.7B-Base" "$MODELS_DIR/Qwen3-TTS-12Hz-1.7B-Base" "model.safetensors"
+        ;;
+    *)
+        die "不支持的 DEFAULT_TTS_MODEL: $DEFAULT_TTS_MODEL"
+        ;;
+esac
+
+echo ""
+echo "5. 安装 MFA"
+if [ "$MFA_ENABLE_VALUE" = "True" ]; then
+    if bash scripts/install_mfa.sh; then
+        green "✅ MFA 已就绪"
+    else
+        yellow "⚠️  MFA 安装未通过，服务仍可启动，但可能不返回精准时间戳"
+    fi
 else
-    warning "MFA 中文分词依赖缺失，重新执行 uv sync 或 bash scripts/install_mfa.sh"
-fi
-
-# ============================================================
-# Step 5: 下载 TTS 模型
-# ============================================================
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 6: 下载 TTS 模型"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-
-# 检查 modelscope
-if ! command_exists modelscope; then
-    echo "安装 modelscope..."
-    uv pip install modelscope
-fi
-
-# 下载 CosyVoice2
-echo ""
-echo "📥 下载 CosyVoice2-0.5B (约 4.1GB)..."
-modelscope download --model iic/CosyVoice2-0.5B \
-    --local_dir "$MODELS_DIR/CosyVoice2-0.5B"
-
-if [ -f "$MODELS_DIR/CosyVoice2-0.5B/llm.pt" ]; then
-    success "CosyVoice2 下载完成"
-else
-    error "CosyVoice2 下载失败"
-fi
-
-# 下载 Qwen3-TTS
-echo ""
-echo "📥 下载 Qwen3-TTS-12Hz-1.7B-Base (约 4.2GB)..."
-modelscope download --model Qwen/Qwen3-TTS-12Hz-1.7B-Base \
-    --local_dir "$MODELS_DIR/Qwen3-TTS-12Hz-1.7B-Base"
-
-if [ -f "$MODELS_DIR/Qwen3-TTS-12Hz-1.7B-Base/model.safetensors" ]; then
-    success "Qwen3-TTS 下载完成"
-else
-    error "Qwen3-TTS 下载失败"
-fi
-
-# ============================================================
-# Step 6: 下载 MFA 模型
-# ============================================================
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 7: 下载 MFA 模型"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-
-echo "检查 uv 环境中的 MFA CLI..."
-if uv run mfa --version >/dev/null 2>&1; then
-    success "MFA CLI 已安装"
-    echo ""
-    echo "📥 下载 MFA 中文模型 (mandarin_mfa)..."
-    uv run mfa model download acoustic mandarin_mfa || warning "声学模型下载可能失败"
-    uv run mfa model download dictionary mandarin_mfa || warning "词典下载可能失败"
-    success "MFA 模型配置完成"
-else
-    warning "uv 环境中的 MFA CLI 不可用"
-    warning "可稍后运行: bash scripts/install_mfa.sh"
-fi
-
-# ============================================================
-# Step 7: 验证安装
-# ============================================================
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 8: 验证安装"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-
-echo "验证模型文件..."
-CHECKS_PASSED=0
-CHECKS_TOTAL=0
-
-# 检查 CosyVoice2
-CHECKS_TOTAL=$((CHECKS_TOTAL + 1))
-if [ -f "$MODELS_DIR/CosyVoice2-0.5B/llm.pt" ]; then
-    success "CosyVoice2 模型 ✅"
-    CHECKS_PASSED=$((CHECKS_PASSED + 1))
-else
-    error "CosyVoice2 模型 ❌"
-fi
-
-# 检查 Qwen3-TTS
-CHECKS_TOTAL=$((CHECKS_TOTAL + 1))
-if [ -f "$MODELS_DIR/Qwen3-TTS-12Hz-1.7B-Base/model.safetensors" ]; then
-    success "Qwen3-TTS 模型 ✅"
-    CHECKS_PASSED=$((CHECKS_PASSED + 1))
-else
-    error "Qwen3-TTS 模型 ❌"
-fi
-
-# 检查 Python 依赖
-CHECKS_TOTAL=$((CHECKS_TOTAL + 1))
-if uv run python -c "import torch; import fastapi; import librosa" 2>/dev/null; then
-    success "Python 依赖 ✅"
-    CHECKS_PASSED=$((CHECKS_PASSED + 1))
-else
-    warning "Python 依赖可能不完整"
+    yellow "⚠️  MFA_ENABLE=False，跳过 MFA 安装"
 fi
 
 echo ""
-echo "验证结果: $CHECKS_PASSED / $CHECKS_TOTAL 通过"
-echo ""
+echo "6. 验收安装"
+uv run python scripts/verify_installation.py || yellow "⚠️  安装检查未全部通过，请按输出处理"
 
-echo "MFA 状态检查..."
-if uv run python scripts/check_mfa_ready.py; then
-    success "MFA 验收通过"
-else
-    warning "MFA 尚未 ready，可稍后运行: bash scripts/install_mfa.sh"
-fi
-
-# ============================================================
-# Step 8: 清理临时文件
-# ============================================================
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 9: 清理临时文件"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+green "✅ 安装完成"
+echo "配置文件: $ENV_FILE"
+echo "默认模型: $DEFAULT_TTS_MODEL"
 echo ""
-
-rm -rf "$TEMP_DIR"
-success "临时文件清理完成"
-
-# ============================================================
-# 完成
-# ============================================================
-echo ""
-echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║                    ✅ 安装完成！                              ║"
-echo "╚════════════════════════════════════════════════════════════════╝"
-echo ""
-
-echo "📊 安装摘要："
-echo "  - uv 项目环境: $PROJECT_DIR/.venv"
-echo "  - Python 依赖: 已安装"
-echo "  - CosyVoice2 模型: $MODELS_DIR/CosyVoice2-0.5B (4.1GB) - iic/CosyVoice2-0.5B"
-echo "  - Qwen3-TTS 模型: $MODELS_DIR/Qwen3-TTS-12Hz-1.7B-Base (4.2GB) - Qwen/Qwen3-TTS-12Hz-1.7B-Base"
-echo "  - MFA 模型: ~/.mfa/models/ (约 100MB)"
-echo ""
-
-echo "🚀 快速开始："
-echo ""
-echo "  # 同步依赖"
-echo "  uv sync"
-echo ""
-echo "  # 启动 API 服务"
+echo "启动命令:"
 echo "  bash scripts/run.sh"
 echo ""
-echo "  # 或直接使用 uv"
-echo "  uv run uvicorn app:app --host 0.0.0.0 --port 8000"
-echo ""
-
-echo "📖 访问 API 文档:"
-echo "  http://localhost:8000/docs"
-echo ""
-
-echo "⚙️  配置文件:"
-echo "  - .env - 环境变量配置"
-echo "  - config.py - Python 配置"
-echo ""
-
-echo "✅ 安装成功！现在可以启动服务了。"
-echo ""
+echo "接口文档:"
+echo "  http://127.0.0.1:8000/docs"

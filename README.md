@@ -2,6 +2,73 @@
 
 一个面向服务化部署的 TTS API 项目，基于 FastAPI 封装 CosyVoice2、Qwen3-TTS 和 MFA 对齐能力，提供统一的文本转语音、音频输出和时间戳接口。
 
+## Quick Start
+
+新用户现在只需要这两步：
+
+```bash
+git clone git@github.com:yuhuotech/yuhuo-tts.git
+cd yuhuo-tts
+bash scripts/install.sh
+bash scripts/run.sh
+```
+
+如果你在 Linux 上，支持的主路径是：
+
+- Ubuntu 20.04+
+- CentOS 8+ / Rocky Linux / AlmaLinux
+- macOS 12+
+
+默认行为：
+
+- 自动生成 `.env`
+- 按 `DEFAULT_TTS_MODEL` 只下载一个模型
+- 自动安装 CosyVoice 运行依赖
+- 如果 `MFA_ENABLE=True`，自动安装并验收 MFA
+
+默认地址：
+
+- API: `http://127.0.0.1:8000`
+- Docs: `http://127.0.0.1:8000/docs`
+
+推荐先保持默认配置，资源压力最小：
+
+```env
+DEFAULT_TTS_MODEL=cosyvoice2
+MFA_ENABLE=True
+MFA_FALLBACK_ALIGNMENT=none
+```
+
+## Linux Support
+
+项目现在不只按 macOS 来设计，安装脚本已经考虑了 Linux。
+
+在 Ubuntu 上，建议先准备：
+
+```bash
+sudo apt update
+sudo apt install -y git curl build-essential ffmpeg
+```
+
+在 CentOS / RHEL / Rocky / AlmaLinux 上，建议先准备：
+
+```bash
+sudo yum install -y git curl gcc gcc-c++ make ffmpeg
+```
+
+如果系统较新，也可以使用：
+
+```bash
+sudo dnf install -y git curl gcc gcc-c++ make ffmpeg
+```
+
+之后统一执行：
+
+```bash
+bash scripts/install.sh
+bash scripts/run.sh
+```
+
 ## Overview
 
 YuHuo TTS 解决的是“把本地模型能力整理成可调用 API”的问题，重点不是训练模型，而是把推理、文件输出、上传参考音频、时间戳对齐和部署入口串成一个可落地的服务。
@@ -140,70 +207,43 @@ YuHuo TTS 解决的是“把本地模型能力整理成可调用 API”的问题
 推荐在 `/synthesize` 中使用 `uploaded_audio_id` 引用已上传文件。
 兼容场景下也可以直接传本地 `prompt_audio` 路径，但那更适合同机部署或可信环境。
 
-## Quick Start
+## Install Flow
 
 项目建议使用 Python `3.12`，仓库已通过 [`.python-version`](/Users/hmw/data/www/yuhuo-tts/.python-version) 固定给 `uv`。
 
-### 1. Prepare config
+[`scripts/install.sh`](/Users/hmw/data/www/yuhuo-tts/scripts/install.sh) 现在是唯一推荐安装入口。它会自动完成：
 
-```bash
-cp .env.example .env
-```
-
-### 2. Install dependencies
-
-推荐直接使用脚本：
-
-```bash
-bash scripts/install.sh
-```
-
-这个脚本会：
-
-- 使用 `uv` 创建并管理项目环境
-- 同步 Python 依赖
+- 没有 `.env` 时，从 [`.env.example`](/Users/hmw/data/www/yuhuo-tts/.env.example) 生成
+- 缺少 `uv` 时尝试自动安装
+- `uv sync`
 - 克隆 `third_party/CosyVoice`
-- 下载 CosyVoice2 和 Qwen3-TTS 模型到 `models/`
-- 尝试通过项目 `uv` 环境初始化 MFA 模型
-- 安装 MFA 中文对齐需要的分词依赖
+- 安装 CosyVoice 运行依赖
+- 按 `DEFAULT_TTS_MODEL` 下载一个模型
+- 在 `MFA_ENABLE=True` 时执行 [`scripts/install_mfa.sh`](/Users/hmw/data/www/yuhuo-tts/scripts/install_mfa.sh)
+- 运行 [`scripts/verify_installation.py`](/Users/hmw/data/www/yuhuo-tts/scripts/verify_installation.py)
 
-### 3. Start the API
+切换模型时，改完 `.env` 再重跑一次安装脚本即可：
 
-```bash
-uv sync
-bash scripts/run.sh
-```
-
-默认地址：
-
-- API: `http://localhost:8000`
-- Swagger: `http://localhost:8000/docs`
-
-### 4. Verify installation
-
-```bash
-uv run python scripts/verify_installation.py
-uv run python scripts/test_api.py
+```env
+DEFAULT_TTS_MODEL=qwen3
 ```
 
 ## Manual Setup
 
-如果你不想使用安装脚本，至少需要完成这些步骤：
+如果你不想使用一键脚本，至少需要完成这些步骤：
 
 ```bash
+cp .env.example .env
 uv sync
 git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git third_party/CosyVoice
-uv pip install -r third_party/CosyVoice/requirements.txt
+uv pip install --no-build-isolation HyperPyYAML==1.2.3 hydra-core==1.3.2 omegaconf==2.3.0 inflect==7.3.1 wetext==0.0.4 conformer==0.3.2 diffusers==0.29.0 gdown==5.1.0 x-transformers==2.11.24 lightning==2.2.4 openai-whisper==20231117 protobuf==4.25.0 pyarrow==18.1.0 rich==13.7.1 wget==3.2
 ```
 
-下载模型：
+按 `.env` 里的默认模型下载权重：
 
 ```bash
-modelscope download --model iic/CosyVoice2-0.5B \
+uv run modelscope download --model iic/CosyVoice2-0.5B \
   --local_dir ./models/CosyVoice2-0.5B
-
-modelscope download --model Qwen/Qwen3-TTS-12Hz-1.7B-Base \
-  --local_dir ./models/Qwen3-TTS-12Hz-1.7B-Base
 ```
 
 如需真实 MFA 对齐：
@@ -211,6 +251,8 @@ modelscope download --model Qwen/Qwen3-TTS-12Hz-1.7B-Base \
 ```bash
 bash scripts/install_mfa.sh
 ```
+
+如果 `uv` 环境里的 MFA CLI 不可用，`scripts/install_mfa.sh` 会自动回退到系统 `PATH` 中的 `mfa`。
 
 ## Configuration
 
@@ -237,6 +279,7 @@ bash scripts/install_mfa.sh
 说明：
 
 - `DEFAULT_TTS_MODEL` 控制服务启动时实际加载哪个模型
+- `scripts/install.sh` 只会下载 `DEFAULT_TTS_MODEL` 对应的模型
 - 如果你只想降低本机内存和 CPU 压力，建议设置为 `DEFAULT_TTS_MODEL=cosyvoice2`
 
 ## Dependency Management
@@ -273,6 +316,7 @@ docker compose up -d --build
 仓库把辅助脚本集中放在 `scripts/`：
 
 - [scripts/install.sh](/Users/hmw/data/www/yuhuo-tts/scripts/install.sh): 一键安装依赖与模型
+- [scripts/install_mfa.sh](/Users/hmw/data/www/yuhuo-tts/scripts/install_mfa.sh): 单独安装和验收 MFA
 - [scripts/run.sh](/Users/hmw/data/www/yuhuo-tts/scripts/run.sh): 使用 `uv` 启动服务
 - [scripts/verify_installation.py](/Users/hmw/data/www/yuhuo-tts/scripts/verify_installation.py): 检查依赖和目录
 - [scripts/test_api.py](/Users/hmw/data/www/yuhuo-tts/scripts/test_api.py): 调用 API 做集成测试

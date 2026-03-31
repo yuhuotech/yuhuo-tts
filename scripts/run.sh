@@ -2,9 +2,6 @@
 
 set -euo pipefail
 
-# TTS-Alignment-API 启动脚本
-# 使用 uv 管理环境并启动应用
-
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
 COSYVOICE_ROOT="$PROJECT_DIR/third_party/CosyVoice"
@@ -27,10 +24,7 @@ COSYVOICE_RUNTIME_DEPS=(
     "wget==3.2"
 )
 
-if ! command -v uv >/dev/null 2>&1; then
-    echo "❌ 未找到 uv，请先安装 uv"
-    exit 1
-fi
+command -v uv >/dev/null 2>&1 || { echo "❌ 未找到 uv"; exit 1; }
 
 if [ ! -d "$COSYVOICE_ROOT" ]; then
     echo "❌ 未找到 CosyVoice 源码目录: $COSYVOICE_ROOT"
@@ -40,24 +34,14 @@ fi
 
 export PYTHONPATH="$COSYVOICE_ROOT:$MATCHA_ROOT:${PYTHONPATH:-}"
 
-echo "✓ PYTHONPATH 已设置："
-echo "  $PYTHONPATH"
-echo ""
-
 cd "$PROJECT_DIR"
 
-echo "🔄 使用 uv 同步依赖..."
 uv sync
 
 if ! uv run python -c "from cosyvoice.cli.cosyvoice import AutoModel" >/dev/null 2>&1; then
-    echo ""
-    echo "🔄 检测到 CosyVoice 依赖未就绪，使用 uv 补装第三方依赖..."
     uv pip install --no-build-isolation "${COSYVOICE_RUNTIME_DEPS[@]}"
 fi
 
-echo ""
-echo "🚀 启动 TTS-Alignment-API..."
-echo "   访问 API 文档: http://0.0.0.0:8000/docs"
-echo ""
+echo "启动服务: http://127.0.0.1:8000/docs"
 
 exec uv run uvicorn app:app --host 0.0.0.0 --port 8000 "$@"
